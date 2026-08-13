@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NStCut.Nesting.Tests", "NSt
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NStCut.Dxf.Tests", "NStCut.Dxf.Tests\NStCut.Dxf.Tests.csproj", "{602ECD97-53CD-46AE-82F6-7A7FDB576769}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NStCut.Reports.Tests", "NStCut.Reports.Tests\NStCut.Reports.Tests.csproj", "{A95EF2C7-7B61-4343-834A-391A32639D08}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,18 @@ Global
 		{602ECD97-53CD-46AE-82F6-7A7FDB576769}.Release|x64.Build.0 = Release|Any CPU
 		{602ECD97-53CD-46AE-82F6-7A7FDB576769}.Release|x86.ActiveCfg = Release|Any CPU
 		{602ECD97-53CD-46AE-82F6-7A7FDB576769}.Release|x86.Build.0 = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|x64.Build.0 = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Debug|x86.Build.0 = Debug|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|x64.ActiveCfg = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|x64.Build.0 = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|x86.ActiveCfg = Release|Any CPU
+		{A95EF2C7-7B61-4343-834A-391A32639D08}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
