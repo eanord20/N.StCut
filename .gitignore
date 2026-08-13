@@ -15,3 +15,6 @@ packages/
 # Windows
 Thumbs.db
 Desktop.ini
+
+# Devin SDD scratch workspace
+.superpowers/
