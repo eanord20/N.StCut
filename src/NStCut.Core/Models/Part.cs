@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 using NStCut.Core.Geometry;
 
 namespace NStCut.Core.Models;
@@ -11,7 +13,10 @@ public sealed class Part
     public PartStatus Status { get; set; } = PartStatus.Pending;
     public bool IsManuallyResolved { get; set; }
     public GrainMode GrainMode { get; set; } = GrainMode.FollowMaterial;
+
+    [JsonIgnore]
     public Polygon2D? Contour { get; set; }
+
     public Rect Bounds { get; set; }
     public double Area { get; set; }
 
