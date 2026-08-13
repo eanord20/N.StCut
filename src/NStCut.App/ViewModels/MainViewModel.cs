@@ -1,0 +1,431 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Windows;
+using System.Windows.Input;
+using ExcelDataReader;
+using Microsoft.Win32;
+using NStCut.App.Commands;
+using NStCut.App.Models;
+using NStCut.App.Services;
+using NStCut.Core.Contracts;
+using NStCut.Core.Geometry;
+using NStCut.Core.Models;
+using Application = System.Windows.Application;
+using Clipboard = System.Windows.Clipboard;
+using MessageBox = System.Windows.MessageBox;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
+
+namespace NStCut.App.ViewModels;
+
+public sealed class MainViewModel : INotifyPropertyChanged
+{
+    private readonly LocalizationService _localization = LocalizationService.Instance;
+    private readonly FileResolveService _fileResolveService = new();
+    private readonly ProjectFileService _projectService = new();
+    private readonly UpdateService _updateService = new();
+
+    private readonly INestingEngine _nestingEngine;
+    private readonly IDxfGeometryService _dxfGeometry;
+    private readonly IDxfExportService _dxfExport;
+    private readonly IReportService _reportService;
+
+    private string _searchPath = string.Empty;
+    private string _outputPath = string.Empty;
+    private string _projectName = "N.StCut Project";
+    private string _statusText = string.Empty;
+    private double _progressValue;
+    private bool _isBusy;
+    private PartRow? _selectedRow;
+    private NestingResult? _nestingResult;
+
+    private readonly LinkedList<List<PartRow>> _undoStack = new();
+    private const int MaxUndoDepth = 50;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public MainViewModel(INestingEngine nestingEngine, IDxfGeometryService dxfGeometry,
+        IDxfExportService dxfExport, IReportService reportService)
+    {
+        _nestingEngine = nestingEngine;
+        _dxfGeometry = dxfGeometry;
+        _dxfExport = dxfExport;
+        _reportService = reportService;
+
+        Rows.CollectionChanged += (_, _) => OnRowsChanged();
+        Materials.CollectionChanged += (_, _) => CommandManager.InvalidateRequerySuggested();
+
+        BrowseSearchPathCommand = new RelayCommand(_ => BrowseSearchPath());
+        BrowseOutputPathCommand = new RelayCommand(_ => BrowseOutputPath());
+        AddRowCommand = new RelayCommand(_ => AddRow());
+        DeleteSelectedRowsCommand = new RelayCommand(_ => DeleteSelectedRows(), _ => SelectedRow != null);
+        FindFilesCommand = new RelayCommand(_ => FindFiles(), _ => !string.IsNullOrWhiteSpace(SearchPath));
+        PasteFromClipboardCommand = new RelayCommand(_ => PasteFromClipboard());
+        ImportExcelFileCommand = new RelayCommand(_ => ImportExcelFile());
+        OpenMaterialsCommand = new RelayCommand(_ => OpenMaterialsWindow());
+        NestCommand = new RelayCommand(_ => Nest(), _ => CanNest());
+        ExportDxfCommand = new RelayCommand(_ => ExportDxf(), _ => _nestingResult != null);
+        ExportReportCommand = new RelayCommand(_ => ExportReport(), _ => _nestingResult != null);
+        UndoCommand = new RelayCommand(_ => Undo(), _ => _undoStack.Count > 0);
+        SaveProjectCommand = new RelayCommand(_ => SaveProject(), _ => Rows.Count > 0);
+        OpenProjectCommand = new RelayCommand(_ => OpenProject());
+        SelectFileManuallyCommand = new RelayCommand(_ => SelectFileManually(), _ => SelectedRow != null);
+        SelectAmbiguousFileCommand = new RelayCommand(_ => SelectAmbiguousFile(), _ => SelectedRow?.Status == PartStatus.Ambiguous);
+        SetLanguageCommand = new RelayCommand(lang => SetLanguage(lang));
+    }
+
+    public ObservableCollection<PartRow> Rows { get; } = new();
+    public ObservableCollection<MaterialRow> Materials { get; } = new();
+
+    public string SearchPath
+    {
+        get => _searchPath;
+        set { _searchPath = value; OnPropertyChanged(); }
+    }
+
+    public string OutputPath
+    {
+        get => _outputPath;
+        set { _outputPath = value; OnPropertyChanged(); }
+    }
+
+    public string ProjectName
+    {
+        get => _projectName;
+        set { _projectName = value; OnPropertyChanged(); }
+    }
+
+    public string StatusText
+    {
+        get => _statusText;
+        set { _statusText = value; OnPropertyChanged(); }
+    }
+
+    public double ProgressValue
+    {
+        get => _progressValue;
+        set { _progressValue = value; OnPropertyChanged(); }
+    }
+
+    public bool IsBusy
+    {
+        get => _isBusy;
+        set { _isBusy = value; OnPropertyChanged(); }
+    }
+
+    public PartRow? SelectedRow
+    {
+        get => _selectedRow;
+        set
+        {
+            _selectedRow = value;
+            OnPropertyChanged();
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    public int TotalCount => Rows.Count;
+    public int FoundCount => Rows.Count(r => r.Status == PartStatus.Found);
+    public int NotFoundCount => Rows.Count(r => r.Status == PartStatus.NotFound);
+    public int AmbiguousCount => Rows.Count(r => r.Status == PartStatus.Ambiguous);
+
+    public ICommand BrowseSearchPathCommand { get; }
+    public ICommand BrowseOutputPathCommand { get; }
+    public ICommand AddRowCommand { get; }
+    public ICommand DeleteSelectedRowsCommand { get; }
+    public ICommand FindFilesCommand { get; }
+    public ICommand PasteFromClipboardCommand { get; }
+    public ICommand ImportExcelFileCommand { get; }
+    public ICommand OpenMaterialsCommand { get; }
+    public ICommand NestCommand { get; }
+    public ICommand ExportDxfCommand { get; }
+    public ICommand ExportReportCommand { get; }
+    public ICommand UndoCommand { get; }
+    public ICommand SaveProjectCommand { get; }
+    public ICommand OpenProjectCommand { get; }
+    public ICommand SelectFileManuallyCommand { get; }
+    public ICommand SelectAmbiguousFileCommand { get; }
+    public ICommand SetLanguageCommand { get; }
+
+    private void OnRowsChanged()
+    {
+        OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(FoundCount));
+        OnPropertyChanged(nameof(NotFoundCount));
+        OnPropertyChanged(nameof(AmbiguousCount));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void PushUndoSnapshot()
+    {
+        while (_undoStack.Count >= MaxUndoDepth)
+            _undoStack.RemoveFirst();
+        _undoStack.AddLast(Rows.Select(r => r.Clone()).ToList());
+        ((RelayCommand)UndoCommand).RaiseCanExecuteChanged();
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        var snapshot = _undoStack.Last!.Value;
+        _undoStack.RemoveLast();
+        Rows.Clear();
+        foreach (var row in snapshot)
+            Rows.Add(row);
+        OnRowsChanged();
+        ((RelayCommand)UndoCommand).RaiseCanExecuteChanged();
+    }
+
+    private void BrowseSearchPath()
+    {
+        using var dlg = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = _localization["LabelSearchPath"]
+        };
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            SearchPath = dlg.SelectedPath;
+    }
+
+    private void BrowseOutputPath()
+    {
+        using var dlg = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = _localization["LabelOutputPath"]
+        };
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            OutputPath = dlg.SelectedPath;
+    }
+
+    private void AddRow()
+    {
+        PushUndoSnapshot();
+        var row = new PartRow { RowNumber = Rows.Count + 1 };
+        Rows.Add(row);
+        SelectedRow = row;
+    }
+
+    private void DeleteSelectedRows()
+    {
+        if (SelectedRow == null) return;
+        PushUndoSnapshot();
+        var selected = Rows.Where(r => r == SelectedRow).ToList();
+        foreach (var row in selected)
+            Rows.Remove(row);
+        SelectedRow = Rows.FirstOrDefault();
+    }
+
+    private void SelectFileManually()
+    {
+        if (SelectedRow == null) return;
+        var dlg = new OpenFileDialog { Filter = "DXF files (*.dxf)|*.dxf" };
+        if (dlg.ShowDialog() != true) return;
+        PushUndoSnapshot();
+        SelectedRow.DxfPath = dlg.FileName;
+        SelectedRow.Status = PartStatus.ManuallySelected;
+        SelectedRow.IsManuallyResolved = true;
+        OnRowsChanged();
+    }
+
+    private void SelectAmbiguousFile()
+    {
+        if (SelectedRow == null || SelectedRow.Status != PartStatus.Ambiguous) return;
+        var candidates = _fileResolveService.GetCandidates(SelectedRow.Name, SearchPath);
+        var window = new NStCut.App.Views.CandidateSelectWindow(candidates)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        if (window.ShowDialog() != true) return;
+        if (string.IsNullOrWhiteSpace(window.SelectedPath)) return;
+        PushUndoSnapshot();
+        SelectedRow.DxfPath = window.SelectedPath;
+        SelectedRow.Status = PartStatus.ManuallySelected;
+        SelectedRow.IsManuallyResolved = true;
+        OnRowsChanged();
+    }
+
+    private void FindFiles()
+    {
+        foreach (var row in Rows.Where(r => !r.IsManuallyResolved))
+        {
+            var result = _fileResolveService.Resolve(row.Name, SearchPath);
+            row.Status = result.Status;
+            row.DxfPath = result.Path;
+        }
+        OnRowsChanged();
+    }
+
+    private void PasteFromClipboard()
+    {
+        if (!Clipboard.ContainsText()) return;
+        PushUndoSnapshot();
+        var text = Clipboard.GetText();
+        var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            var parts = line.Split('\t');
+            int qty = 1;
+            string name = parts[0].Trim();
+            if (parts.Length > 1 && int.TryParse(parts[0].Trim(), out var parsedQty))
+            {
+                qty = parsedQty;
+                name = parts[1].Trim();
+            }
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            Rows.Add(new PartRow { RowNumber = Rows.Count + 1, Quantity = qty, Name = name });
+        }
+    }
+
+    private void ImportExcelFile()
+    {
+        var dlg = new OpenFileDialog { Filter = "Excel files (*.xlsx;*.xls)|*.xlsx;*.xls" };
+        if (dlg.ShowDialog() != true) return;
+        PushUndoSnapshot();
+        using var stream = File.Open(dlg.FileName, FileMode.Open, FileAccess.Read);
+        using var reader = ExcelReaderFactory.CreateReader(stream);
+        // Read first sheet, skip header row
+        bool first = true;
+        while (reader.Read())
+        {
+            if (first) { first = false; continue; }
+            var name = reader.GetValue(0)?.ToString() ?? string.Empty;
+            var qtyValue = reader.GetValue(1);
+            int qty = qtyValue != null && int.TryParse(qtyValue.ToString(), out var q) ? q : 1;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            Rows.Add(new PartRow { RowNumber = Rows.Count + 1, Quantity = qty, Name = name });
+        }
+    }
+
+    private void OpenMaterialsWindow()
+    {
+        var vm = new MaterialsViewModel(Materials);
+        var window = new NStCut.App.Views.MaterialsWindow { DataContext = vm };
+        if (window.ShowDialog() == true)
+        {
+            Materials.Clear();
+            foreach (var m in vm.Materials)
+                Materials.Add(m);
+        }
+    }
+
+    private bool CanNest()
+    {
+        return Rows.Count > 0 && Materials.Count > 0 &&
+               Rows.Any(r => !string.IsNullOrWhiteSpace(r.MaterialId));
+    }
+
+    private void Nest()
+    {
+        IsBusy = true;
+        try
+        {
+            var options = new NestingOptions();
+            var materialDict = Materials.ToDictionary(m => m.Id, m => m.ToMaterial());
+            var parts = Rows.Select(r => r.ToPart()).ToList();
+
+            // Resolve DXF bounds
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part.DxfPath) || !File.Exists(part.DxfPath))
+                {
+                    part.Status = PartStatus.NotFound;
+                    continue;
+                }
+                var contour = _dxfGeometry.ReadContour(part.DxfPath);
+                part.Bounds = contour.Bounds;
+                part.Area = contour.Bounds.Area;
+            }
+
+            var materials = parts.Select(p => p.MaterialId).Distinct()
+                .Where(id => materialDict.ContainsKey(id))
+                .Select(id => materialDict[id])
+                .ToList();
+
+            var progress = new Progress<double>(v => ProgressValue = v);
+            _nestingResult = _nestingEngine.Nest(parts, materials, options, progress);
+
+            StatusText = $"Sheets: {_nestingResult.Sheets.Count}, unplaced: {_nestingResult.Unplaced.Count}";
+            ((RelayCommand)ExportDxfCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)ExportReportCommand).RaiseCanExecuteChanged();
+
+            var preview = new NStCut.App.Views.SheetPreviewWindow { DataContext = new SheetPreviewViewModel(_nestingResult) };
+            preview.Show();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Nesting error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void ExportDxf()
+    {
+        if (_nestingResult == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        Directory.CreateDirectory(OutputPath);
+        foreach (var sheet in _nestingResult.Sheets)
+        {
+            var safeMaterial = string.Join("_", sheet.Material.Name.Split(Path.GetInvalidFileNameChars()));
+            var path = Path.Combine(OutputPath, $"{safeMaterial}_Sheet_{sheet.Index:D2}.dxf");
+            _dxfExport.WriteSheet(path, sheet, 5.0, 5.0);
+        }
+        StatusText = $"DXF exported to {OutputPath}";
+    }
+
+    private void ExportReport()
+    {
+        if (_nestingResult == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        Directory.CreateDirectory(OutputPath);
+
+        var parts = Rows.Select(r => r.ToPart()).ToList();
+        var sheets = _nestingResult.Sheets;
+        var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s)).ToList();
+
+        var path = Path.Combine(OutputPath, "Report.docx");
+        _reportService.GenerateReport(path, ProjectName, parts, sheets, thumbnails);
+        StatusText = $"Report saved: {path}";
+    }
+
+    private void SaveProject()
+    {
+        var dlg = new SaveFileDialog { Filter = "NStCut project (*.nstcut)|*.nstcut", FileName = "project.nstcut" };
+        if (dlg.ShowDialog() != true) return;
+        var data = new ProjectData
+        {
+            SearchPath = SearchPath,
+            OutputPath = OutputPath,
+            Parts = Rows.Select(r => r.ToPart()).ToList(),
+            Materials = Materials.Select(m => m.ToMaterial()).ToList()
+        };
+        _projectService.Save(dlg.FileName, data);
+    }
+
+    private void OpenProject()
+    {
+        var dlg = new OpenFileDialog { Filter = "NStCut project (*.nstcut)|*.nstcut" };
+        if (dlg.ShowDialog() != true) return;
+        PushUndoSnapshot();
+        var data = _projectService.Load(dlg.FileName);
+        SearchPath = data.SearchPath;
+        OutputPath = data.OutputPath;
+        Rows.Clear();
+        foreach (var p in data.Parts)
+            Rows.Add(PartRow.FromPart(p));
+        Materials.Clear();
+        foreach (var m in data.Materials)
+            Materials.Add(MaterialRow.FromMaterial(m));
+    }
+
+    private void SetLanguage(object? lang)
+    {
+        if (lang is string s)
+            _localization.Culture = s;
+        OnPropertyChanged(string.Empty);
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
