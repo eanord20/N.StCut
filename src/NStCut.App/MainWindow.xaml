@@ -3,10 +3,182 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:NStCut.App"
+        xmlns:vm="clr-namespace:NStCut.App.ViewModels"
+        xmlns:conv="clr-namespace:NStCut.App.Converters"
+        xmlns:loc="clr-namespace:NStCut.App.Services"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=WindowTitle}"
+        Height="720" Width="1280" WindowState="Maximized">
 
+    <Window.Resources>
+        <conv:StatusToBrushConverter x:Key="StatusToBrushConverter" />
+        <x:Array x:Key="GrainModes" Type="{x:Type conv:GrainModeProxy}">
+            <conv:GrainModeProxy Value="FollowMaterial" />
+            <conv:GrainModeProxy Value="Allow90" />
+            <conv:GrainModeProxy Value="Fixed0" />
+        </x:Array>
+    </Window.Resources>
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Menu Grid.Row="0" Background="{DynamicResource MaterialDesignPaper}" FontSize="12">
+            <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuFile}">
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuOpenProject}" Command="{Binding OpenProjectCommand}" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuSaveProject}" Command="{Binding SaveProjectCommand}" />
+            </MenuItem>
+            <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuLanguage}">
+                <MenuItem Header="English" Command="{Binding SetLanguageCommand}" CommandParameter="en" />
+                <MenuItem Header="Українська" Command="{Binding SetLanguageCommand}" CommandParameter="ua" />
+            </MenuItem>
+        </Menu>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{DynamicResource MaterialDesignCardBackground}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="6" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelSearchPath}" />
+                        <TextBox Grid.Column="2" Text="{Binding SearchPath, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
+                        <Button Grid.Column="4" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonBrowse}" Command="{Binding BrowseSearchPathCommand}" />
+                    </Grid>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelOutputPath}" />
+                        <TextBox Grid.Column="2" Text="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
+                        <Button Grid.Column="4" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonBrowse}" Command="{Binding BrowseOutputPathCommand}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" Background="{DynamicResource MaterialDesignCardBackground}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="6" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Row="0" Grid.Column="0" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonAddRow}" Command="{Binding AddRowCommand}" />
+                    <Button Grid.Row="0" Grid.Column="2" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonMaterials}" Command="{Binding OpenMaterialsCommand}" />
+                    <Button Grid.Row="2" Grid.Column="0" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonFindFiles}" Command="{Binding FindFilesCommand}" />
+                    <Button Grid.Row="2" Grid.Column="2" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonNest}" Command="{Binding NestCommand}" Style="{StaticResource MaterialDesignRaisedButton}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="4" Background="{DynamicResource MaterialDesignCardBackground}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1" CornerRadius="6" Padding="8,4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatTotal}" />
+                <TextBlock Margin="6,0,16,0" Text="{Binding TotalCount}" />
+                <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatFound}" />
+                <TextBlock Margin="6,0,16,0" Text="{Binding FoundCount}" />
+                <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatNotFound}" />
+                <TextBlock Margin="6,0,16,0" Text="{Binding NotFoundCount}" />
+                <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatAmbiguous}" />
+                <TextBlock Margin="6,0,0,0" Text="{Binding AmbiguousCount}" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="6" Background="{DynamicResource MaterialDesignCardBackground}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1" CornerRadius="6" Padding="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <ToolBarTray Grid.Row="0" Margin="0,0,0,6">
+                    <ToolBar>
+                        <Button Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonExportDxf}" Command="{Binding ExportDxfCommand}" />
+                        <Button Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonExportReport}" Command="{Binding ExportReportCommand}" />
+                        <Button Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonUndo}" Command="{Binding UndoCommand}" />
+                        <Button Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonPaste}" Command="{Binding PasteFromClipboardCommand}" />
+                        <Button Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonImportExcel}" Command="{Binding ImportExcelFileCommand}" />
+                    </ToolBar>
+                </ToolBarTray>
+                <DataGrid Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoGenerateColumns="False" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnQty}" Binding="{Binding Quantity}" Width="60" />
+                        <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnPartName}" Binding="{Binding Name}" Width="220" />
+                        <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnDxfFile}" Binding="{Binding DxfPath}" Width="260" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnMaterial}" Width="160">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox ItemsSource="{Binding DataContext.Materials, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              SelectedValue="{Binding MaterialId, UpdateSourceTrigger=PropertyChanged}"
+                                              SelectedValuePath="Id"
+                                              DisplayMemberPath="Name"
+                                              IsReadOnly="False" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridComboBoxColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnGrain}"
+                                                SelectedValueBinding="{Binding GrainMode}"
+                                                SelectedValuePath="Value"
+                                                ItemsSource="{StaticResource GrainModes}"
+                                                DisplayMemberPath="DisplayName" />
+                        <DataGridCheckBoxColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnRotate}" Binding="{Binding CanRotate}" />
+                        <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnStatus}" Binding="{Binding Status}" Width="120" IsReadOnly="True" />
+                    </DataGrid.Columns>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                            <Setter Property="Background" Value="{Binding Status, Converter={StaticResource StatusToBrushConverter}}" />
+                            <Setter Property="ContextMenu">
+                                <Setter.Value>
+                                    <ContextMenu>
+                                        <MenuItem Header="Find file" Command="{Binding DataContext.FindFilesCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                                        <MenuItem Header="Select DXF manually" Command="{Binding DataContext.SelectFileManuallyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                                        <MenuItem Header="Resolve ambiguous" Command="{Binding DataContext.SelectAmbiguousFileCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                                        <Separator />
+                                        <MenuItem Header="Delete row" Command="{Binding DataContext.DeleteSelectedRowsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                                    </ContextMenu>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="8" Padding="8,4">
+            <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+        </Border>
     </Grid>
 </Window>
