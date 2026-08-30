@@ -8,6 +8,8 @@ public static class DefaultNestingOptions
     {
         PartGapMm = AppConstants.DefaultPartGapMm,
         SheetMarginMm = AppConstants.DefaultSheetMarginMm,
-        Resolution = AppConstants.ComparisonResolution
+        Resolution = AppConstants.ComparisonResolution,
+        MaxSearchPasses = AppConstants.DefaultMaxSearchPasses,
+        NoImprovementStopCount = AppConstants.DefaultNoImprovementStopCount
     };
 }
