@@ -10,6 +10,8 @@ public static class DefaultNestingOptions
         SheetMarginMm = AppConstants.DefaultSheetMarginMm,
         Resolution = AppConstants.ComparisonResolution,
         MaxSearchPasses = AppConstants.DefaultMaxSearchPasses,
-        NoImprovementStopCount = AppConstants.DefaultNoImprovementStopCount
+        NoImprovementStopCount = AppConstants.DefaultNoImprovementStopCount,
+        AcceptableMaxUnplaced = AppConstants.DefaultAcceptableMaxUnplaced,
+        AcceptableMaxSheets = AppConstants.DefaultAcceptableMaxSheets
     };
 }

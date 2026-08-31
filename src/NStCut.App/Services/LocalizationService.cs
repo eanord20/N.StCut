@@ -50,6 +50,8 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string LabelZoom => this["LabelZoom"];
     public string LabelMaxSearchPasses => this["LabelMaxSearchPasses"];
     public string LabelNoImprovementStopCount => this["LabelNoImprovementStopCount"];
+    public string LabelAcceptableMaxUnplaced => this["LabelAcceptableMaxUnplaced"];
+    public string LabelAcceptableMaxSheets => this["LabelAcceptableMaxSheets"];
     public string ButtonBrowse => this["ButtonBrowse"];
     public string ButtonFindFiles => this["ButtonFindFiles"];
     public string ButtonNest => this["ButtonNest"];
@@ -138,6 +140,8 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["LabelZoom"] = "Zoom",
             ["LabelMaxSearchPasses"] = "Max search passes",
             ["LabelNoImprovementStopCount"] = "Stop after no improvement",
+            ["LabelAcceptableMaxUnplaced"] = "Acceptable unplaced",
+            ["LabelAcceptableMaxSheets"] = "Acceptable sheets",
             ["ButtonBrowse"] = "Browse",
             ["ButtonFindFiles"] = "Find Files",
             ["ButtonNest"] = "Nest",
@@ -225,6 +229,8 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["LabelZoom"] = "Масштаб",
             ["LabelMaxSearchPasses"] = "Макс. кількість проходів",
             ["LabelNoImprovementStopCount"] = "Зупинка без покращень",
+            ["LabelAcceptableMaxUnplaced"] = "Допуст. нерозміщ.",
+            ["LabelAcceptableMaxSheets"] = "Допуст. листів",
             ["ButtonBrowse"] = "Огляд",
             ["ButtonFindFiles"] = "Знайти файли",
             ["ButtonNest"] = "Розкрій",

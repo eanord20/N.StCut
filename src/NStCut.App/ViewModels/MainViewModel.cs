@@ -57,6 +57,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private double _partGapMm = DefaultNestingOptions.Value.PartGapMm;
     private int _maxSearchPasses = DefaultNestingOptions.Value.MaxSearchPasses;
     private int _noImprovementStopCount = DefaultNestingOptions.Value.NoImprovementStopCount;
+    private int _acceptableMaxUnplaced = DefaultNestingOptions.Value.AcceptableMaxUnplaced;
+    private int _acceptableMaxSheets = DefaultNestingOptions.Value.AcceptableMaxSheets;
+    private string? _lastNestingLogPath;
     private bool _suspendRecompute;
     private bool _loadingSettings;
     private bool _exportCombinedDxf;
@@ -160,6 +163,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (settings.PartGapMm > 0) PartGapMm = settings.PartGapMm;
             if (settings.MaxSearchPasses > 0) MaxSearchPasses = settings.MaxSearchPasses;
             if (settings.NoImprovementStopCount >= 0) NoImprovementStopCount = settings.NoImprovementStopCount;
+            AcceptableMaxUnplaced = settings.AcceptableMaxUnplaced;
+            AcceptableMaxSheets = settings.AcceptableMaxSheets;
             if (!string.IsNullOrWhiteSpace(settings.Culture)) _localization.Culture = settings.Culture;
             _currentTheme = ThemeService.TryParse(settings.Theme, out var theme) ? theme : AppTheme.Light;
             ThemeService.Apply(_currentTheme);
@@ -183,6 +188,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             PartGapMm = PartGapMm,
             MaxSearchPasses = MaxSearchPasses,
             NoImprovementStopCount = NoImprovementStopCount,
+            AcceptableMaxUnplaced = AcceptableMaxUnplaced,
+            AcceptableMaxSheets = AcceptableMaxSheets,
             Culture = _localization.Culture,
             Theme = _currentTheme.ToString(),
             ExportCombinedDxf = ExportCombinedDxf,
@@ -283,6 +290,39 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (!_loadingSettings)
                 SaveAppSettings();
         }
+    }
+
+    /// <summary>Допустимое количество неразмещённых деталей, при достижении которого поиск останавливается (-1 — не использовать).</summary>
+    public int AcceptableMaxUnplaced
+    {
+        get => _acceptableMaxUnplaced;
+        set
+        {
+            _acceptableMaxUnplaced = value;
+            OnPropertyChanged();
+            if (!_loadingSettings)
+                SaveAppSettings();
+        }
+    }
+
+    /// <summary>Допустимое количество листов, при достижении которого поиск останавливается (-1 — не использовать).</summary>
+    public int AcceptableMaxSheets
+    {
+        get => _acceptableMaxSheets;
+        set
+        {
+            _acceptableMaxSheets = value;
+            OnPropertyChanged();
+            if (!_loadingSettings)
+                SaveAppSettings();
+        }
+    }
+
+    /// <summary>Путь к файлу лога последнего раскроя.</summary>
+    public string? LastNestingLogPath
+    {
+        get => _lastNestingLogPath;
+        set { _lastNestingLogPath = value; OnPropertyChanged(); }
     }
 
     /// <summary>true — команда экспорта DXF создаёт один общий файл; false — отдельный файл на каждый лист.</summary>
@@ -561,13 +601,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var options = new NestingOptions
-        {
-            PartGapMm = PartGapMm,
-            SheetMarginMm = SheetMarginMm,
-            MaxSearchPasses = MaxSearchPasses,
-            NoImprovementStopCount = NoImprovementStopCount
-        };
+        var options = CreateNestingOptions();
         row.OversizedEvaluation = SheetFitEvaluator.Evaluate(row.ToPart(), material, options);
     }
 
@@ -1049,13 +1083,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            var options = new NestingOptions
-        {
-            PartGapMm = PartGapMm,
-            SheetMarginMm = SheetMarginMm,
-            MaxSearchPasses = MaxSearchPasses,
-            NoImprovementStopCount = NoImprovementStopCount
-        };
+            var options = CreateNestingOptions();
+            options.LogFilePath = BuildNestingLogPath();
             var materialDict = Materials.ToDictionary(m => m.Id, m => m.ToMaterial());
             var rowReferences = Rows.Where(r => r.IsEnabled).ToList();
             var inputs = rowReferences.Select((row, index) => new NestingInput(index, row.ToPart())).ToList();
@@ -1281,4 +1310,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private NestingOptions CreateNestingOptions()
+    {
+        return new NestingOptions
+        {
+            PartGapMm = PartGapMm,
+            SheetMarginMm = SheetMarginMm,
+            MaxSearchPasses = MaxSearchPasses,
+            NoImprovementStopCount = NoImprovementStopCount,
+            AcceptableMaxUnplaced = AcceptableMaxUnplaced,
+            AcceptableMaxSheets = AcceptableMaxSheets
+        };
+    }
+
+    private string BuildNestingLogPath()
+    {
+        var logsDir = Path.Combine(AppPaths.RootFolder, "nesting_logs");
+        Directory.CreateDirectory(logsDir);
+        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var path = Path.Combine(logsDir, $"nesting_log_{timestamp}.txt");
+        LastNestingLogPath = path;
+        return path;
+    }
 }

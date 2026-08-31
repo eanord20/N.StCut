@@ -9,6 +9,8 @@ public sealed class AppSettings
     public double PartGapMm { get; set; }
     public int MaxSearchPasses { get; set; }
     public int NoImprovementStopCount { get; set; }
+    public int AcceptableMaxUnplaced { get; set; }
+    public int AcceptableMaxSheets { get; set; }
     public string Culture { get; set; } = "en";
     /// <summary>"Light" или "Dark" — см. NStCut.App.Services.AppTheme.</summary>
     public string Theme { get; set; } = "Light";

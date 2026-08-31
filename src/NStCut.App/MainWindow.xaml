@@ -99,6 +99,8 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -112,6 +114,10 @@
                             <TextBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,0" Text="{Binding MaxSearchPasses, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
                             <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelNoImprovementStopCount}" />
                             <TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,0" Text="{Binding NoImprovementStopCount, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxUnplaced}" />
+                            <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxUnplaced, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxSheets}" />
+                            <TextBox Grid.Row="5" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxSheets, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
                         </Grid>
                     </MenuItem.Header>
                 </MenuItem>

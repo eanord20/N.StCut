@@ -1,3 +1,4 @@
+using System.IO;
 using NStCut.Core.Constants;
 using NStCut.Core.Geometry;
 using NStCut.Core.Models;
@@ -110,5 +111,95 @@ public class MultiPassNestingEngineTests
 
         Assert.Single(result.Sheets);
         Assert.Empty(result.Unplaced);
+    }
+
+    [Fact]
+    public void Nest_StopsOnAcceptableMaxSheets()
+    {
+        var material = new SheetMaterial { Length = 45, Width = 32 };
+        var parts = new List<Part>
+        {
+            CreatePart("A", 16, 8, material.Id)
+        };
+        parts[0].Quantity = 2;
+
+        var engine = new MultiPassNestingEngine(new BoundingBoxShelfEngine());
+        var options = new NestingOptions
+        {
+            PartGapMm = 0,
+            SheetMarginMm = 0,
+            Resolution = 0.01,
+            MaxSearchPasses = 100,
+            NoImprovementStopCount = 100,
+            AcceptableMaxSheets = 1
+        };
+
+        engine.Nest(parts, new[] { material }, options);
+
+        Assert.Equal(1, engine.LastSearchPasses);
+        Assert.Single(engine.LastPassLog);
+    }
+
+    [Fact]
+    public void Nest_WritesLogFile()
+    {
+        var material = new SheetMaterial { Length = 100, Width = 100 };
+        var parts = new List<Part>
+        {
+            CreatePart("A", 10, 10, material.Id)
+        };
+
+        var engine = new MultiPassNestingEngine(new BoundingBoxShelfEngine());
+        var logPath = Path.GetTempFileName();
+        var options = new NestingOptions
+        {
+            PartGapMm = 0,
+            SheetMarginMm = 0,
+            Resolution = 0.01,
+            MaxSearchPasses = 3,
+            NoImprovementStopCount = 100,
+            LogFilePath = logPath
+        };
+
+        try
+        {
+            engine.Nest(parts, new[] { material }, options);
+
+            Assert.True(File.Exists(logPath));
+            var content = File.ReadAllText(logPath);
+            Assert.Contains("Pass 1", content);
+            Assert.Contains("Best result:", content);
+        }
+        finally
+        {
+            if (File.Exists(logPath))
+                File.Delete(logPath);
+        }
+    }
+
+    [Fact]
+    public void Nest_PassLogContainsAllPasses()
+    {
+        var material = new SheetMaterial { Length = 100, Width = 100 };
+        var parts = new List<Part>
+        {
+            CreatePart("A", 10, 10, material.Id)
+        };
+
+        var engine = new MultiPassNestingEngine(new BoundingBoxShelfEngine());
+        var options = new NestingOptions
+        {
+            PartGapMm = 0,
+            SheetMarginMm = 0,
+            Resolution = 0.01,
+            MaxSearchPasses = 5,
+            NoImprovementStopCount = 100
+        };
+
+        engine.Nest(parts, new[] { material }, options);
+
+        Assert.Equal(5, engine.LastPassLog.Count);
+        Assert.Equal(1, engine.LastPassLog[0].Pass);
+        Assert.Equal(5, engine.LastPassLog[4].Pass);
     }
 }
