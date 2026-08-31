@@ -288,36 +288,19 @@
                 <!-- Заголовок секции — визуальное зонирование окна (docs/UX_Audit.md, "Список изменений → Important"). -->
                 <TextBlock Grid.Row="0" FontWeight="SemiBold" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SectionDetails}" />
 
-                <!-- Селектор материалов — строка в мини-таблице заменяет кнопки-чипы. -->
-                <DataGrid Grid.Row="2" x:Name="MaterialsGrid"
-                          ItemsSource="{Binding Materials}"
-                          SelectedValuePath="Id"
-                          SelectedValue="{Binding ActivePasteMaterialId, Mode=TwoWay}"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          CanUserReorderColumns="False"
-                          CanUserResizeColumns="False"
-                          CanUserSortColumns="False"
-                          HeadersVisibility="None"
-                          GridLinesVisibility="None"
-                          BorderThickness="0"
-                          Background="Transparent"
-                          MaxHeight="120"
-                          SelectionUnit="FullRow"
-                          SelectionMode="Single"
-                          RowStyle="{StaticResource MaterialRowStyle}">
-                    <DataGrid.CellStyle>
-                        <Style TargetType="DataGridCell">
-                            <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
-                            <Setter Property="Background" Value="Transparent" />
-                        </Style>
-                    </DataGrid.CellStyle>
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Binding="{Binding Name}" Width="*" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                <!-- Чипы материалов проекта — клик делает материал "активным" для следующей вставки -->
+                <ItemsControl Grid.Row="2" ItemsSource="{Binding Materials}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding Name}" Style="{StaticResource MaterialChipStyle}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <ToolBarTray Grid.Row="4" Margin="0,0,0,6">
                     <ToolBar>

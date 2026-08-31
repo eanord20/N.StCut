@@ -8,6 +8,7 @@
         docs/Audit_Architecture.md, DRY Assessment D6).
     -->
     <conv:StatusToBrushConverter x:Key="StatusToBrushConverter" />
+    <conv:ActiveMaterialHighlightConverter x:Key="ActiveMaterialHighlightConverter" />
 
     <!-- Заголовок раздела (группы по материалу) в таблице деталей — кликабельный, делает материал "активным" для вставки.
          Name группы уже сконвертирован в отображаемое имя материала (см. MainViewModel: PropertyGroupDescription
@@ -30,14 +31,19 @@
         </Border>
     </DataTemplate>
 
-    <!-- Строка селектора материала — заменяет бывшие кнопки-чипы. -->
-    <Style x:Key="MaterialRowStyle" TargetType="DataGridRow">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="MinHeight" Value="26" />
-        <Style.Triggers>
-            <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="{DynamicResource ActiveSectionBrush}" />
-            </Trigger>
-        </Style.Triggers>
+    <!-- Чип материала над таблицей: клик делает материал "активным" для вставки (работает и для ещё пустых разделов) -->
+    <Style x:Key="MaterialChipStyle" TargetType="Button" BasedOn="{StaticResource AppButtonStyle}">
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="Padding" Value="10,3" />
+        <Setter Property="Command" Value="{Binding DataContext.SetActiveMaterialCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+        <Setter Property="CommandParameter" Value="{Binding Id}" />
+        <Setter Property="Background">
+            <Setter.Value>
+                <MultiBinding Converter="{StaticResource ActiveMaterialHighlightConverter}">
+                    <Binding Path="Id" />
+                    <Binding Path="DataContext.ActivePasteMaterialId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                </MultiBinding>
+            </Setter.Value>
+        </Setter>
     </Style>
 </ResourceDictionary>
