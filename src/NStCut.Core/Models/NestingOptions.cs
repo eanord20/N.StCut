@@ -14,5 +14,6 @@ public sealed class NestingOptions
     public int AcceptableMaxSheets { get; set; } = AppConstants.DefaultAcceptableMaxSheets;
     public PlacementHeuristic PlacementHeuristic { get; set; } = AppConstants.DefaultPlacementHeuristic;
     public OrientationPreference OrientationPreference { get; set; } = AppConstants.DefaultOrientationPreference;
+    public int PackStrategyIndex { get; set; } = AppConstants.DefaultPackStrategyIndex;
     public string? LogFilePath { get; set; }
 }

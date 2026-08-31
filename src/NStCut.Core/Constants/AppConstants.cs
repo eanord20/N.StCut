@@ -13,4 +13,5 @@ public static class AppConstants
     public const int DefaultAcceptableMaxSheets = -1;
     public const PlacementHeuristic DefaultPlacementHeuristic = PlacementHeuristic.ShortSideFit;
     public const OrientationPreference DefaultOrientationPreference = OrientationPreference.Original;
+    public const int DefaultPackStrategyIndex = -1;
 }

@@ -75,7 +75,7 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
             _selectedIndex = 0;
         }
 
-        RenestCurrentSheetCommand = new RelayCommand(_ => RenestCurrentSheet(), _ => CanRenest && SelectedSheet is not null);
+        RenestCurrentSheetCommand = new RelayCommand(_ => RenestCurrentSheet());
         FitToWindowCommand = new RelayCommand(_ => Zoom = 1.0);
     }
 

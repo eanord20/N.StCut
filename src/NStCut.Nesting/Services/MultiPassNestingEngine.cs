@@ -64,19 +64,23 @@ public sealed class MultiPassNestingEngine : INestingEngine
             OrientationPreference.Original,
             OrientationPreference.Rotated
         };
+        var packStrategies = new[] { 0, 1, 2, 3 };
 
         var originalPlacement = options.PlacementHeuristic;
         var originalOrientation = options.OrientationPreference;
+        var originalPackStrategy = options.PackStrategyIndex;
 
         try
         {
+            var comboCount = heuristics.Length * orientations.Length * packStrategies.Length;
             for (var pass = 0; pass < maxPasses && noImprovementCount < noImprovementLimit; pass++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var combo = pass % (heuristics.Length * orientations.Length);
-                options.PlacementHeuristic = heuristics[combo / orientations.Length];
-                options.OrientationPreference = orientations[combo % orientations.Length];
+                var combo = pass % comboCount;
+                options.PackStrategyIndex = packStrategies[combo % packStrategies.Length];
+                options.PlacementHeuristic = heuristics[(combo / packStrategies.Length) % heuristics.Length];
+                options.OrientationPreference = orientations[(combo / (packStrategies.Length * heuristics.Length)) % orientations.Length];
 
                 var currentParts = pass == 0 ? parts : DeterministicPermutationSource.Permute(parts, baseSeed, pass);
                 var scaledProgress = progress is null ? null : new ScaledProgress(progress, pass, maxPasses);
@@ -93,6 +97,7 @@ public sealed class MultiPassNestingEngine : INestingEngine
                     Unplaced = candidate.Unplaced.Count,
                     UtilizationPercent = candidate.TotalUtilizationPercent,
                     DurationMs = sw.ElapsedMilliseconds,
+                    PackStrategyIndex = options.PackStrategyIndex,
                     PlacementHeuristic = options.PlacementHeuristic,
                     OrientationPreference = options.OrientationPreference
                 });
@@ -115,6 +120,7 @@ public sealed class MultiPassNestingEngine : INestingEngine
         {
             options.PlacementHeuristic = originalPlacement;
             options.OrientationPreference = originalOrientation;
+            options.PackStrategyIndex = originalPackStrategy;
         }
 
         LastPassLog = log;

@@ -23,7 +23,11 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        return NestCore(parts, materials, options, Enum.GetValues<PackingStrategy>(), progress, cancellationToken);
+        var values = Enum.GetValues<PackingStrategy>();
+        var strategies = options.PackStrategyIndex >= 0 && options.PackStrategyIndex < values.Length
+            ? new[] { values[options.PackStrategyIndex] }
+            : (IReadOnlyList<PackingStrategy>)values;
+        return NestCore(parts, materials, options, strategies, progress, cancellationToken);
     }
 
     internal NestingResult NestWithStrategy(
