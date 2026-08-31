@@ -12,6 +12,8 @@ public static class DefaultNestingOptions
         MaxSearchPasses = AppConstants.DefaultMaxSearchPasses,
         NoImprovementStopCount = AppConstants.DefaultNoImprovementStopCount,
         AcceptableMaxUnplaced = AppConstants.DefaultAcceptableMaxUnplaced,
-        AcceptableMaxSheets = AppConstants.DefaultAcceptableMaxSheets
+        AcceptableMaxSheets = AppConstants.DefaultAcceptableMaxSheets,
+        PlacementHeuristic = AppConstants.DefaultPlacementHeuristic,
+        OrientationPreference = AppConstants.DefaultOrientationPreference
     };
 }

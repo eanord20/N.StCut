@@ -1,4 +1,5 @@
 using NStCut.Core.Constants;
+using NStCut.Core.Nesting;
 
 namespace NStCut.Core.Models;
 
@@ -11,5 +12,7 @@ public sealed class NestingOptions
     public int NoImprovementStopCount { get; set; } = AppConstants.DefaultNoImprovementStopCount;
     public int AcceptableMaxUnplaced { get; set; } = AppConstants.DefaultAcceptableMaxUnplaced;
     public int AcceptableMaxSheets { get; set; } = AppConstants.DefaultAcceptableMaxSheets;
+    public PlacementHeuristic PlacementHeuristic { get; set; } = AppConstants.DefaultPlacementHeuristic;
+    public OrientationPreference OrientationPreference { get; set; } = AppConstants.DefaultOrientationPreference;
     public string? LogFilePath { get; set; }
 }

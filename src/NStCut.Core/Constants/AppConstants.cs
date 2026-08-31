@@ -1,3 +1,5 @@
+using NStCut.Core.Nesting;
+
 namespace NStCut.Core.Constants;
 
 public static class AppConstants
@@ -9,4 +11,6 @@ public static class AppConstants
     public const int DefaultNoImprovementStopCount = 30;
     public const int DefaultAcceptableMaxUnplaced = -1;
     public const int DefaultAcceptableMaxSheets = -1;
+    public const PlacementHeuristic DefaultPlacementHeuristic = PlacementHeuristic.ShortSideFit;
+    public const OrientationPreference DefaultOrientationPreference = OrientationPreference.Original;
 }

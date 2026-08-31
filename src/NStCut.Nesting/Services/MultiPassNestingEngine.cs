@@ -9,7 +9,7 @@ namespace NStCut.Nesting.Services;
 
 /// <summary>
 /// Wraps an <see cref="INestingEngine"/> and runs multiple deterministic passes.
-/// Passes shuffle the part order and keep the best result.
+/// Each pass varies the part order, placement heuristic and orientation preference to explore different packings.
 /// </summary>
 public sealed class MultiPassNestingEngine : INestingEngine
 {
@@ -52,39 +52,69 @@ public sealed class MultiPassNestingEngine : INestingEngine
         var noImprovementCount = 0;
         LastSearchPasses = 0;
 
-        for (var pass = 0; pass < maxPasses && noImprovementCount < noImprovementLimit; pass++)
+        var heuristics = new[]
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            PlacementHeuristic.ShortSideFit,
+            PlacementHeuristic.LongSideFit,
+            PlacementHeuristic.BestAreaFit,
+            PlacementHeuristic.BottomLeft
+        };
+        var orientations = new[]
+        {
+            OrientationPreference.Original,
+            OrientationPreference.Rotated
+        };
 
-            var currentParts = pass == 0 ? parts : DeterministicPermutationSource.Permute(parts, baseSeed, pass);
-            var scaledProgress = progress is null ? null : new ScaledProgress(progress, pass, maxPasses);
+        var originalPlacement = options.PlacementHeuristic;
+        var originalOrientation = options.OrientationPreference;
 
-            var sw = Stopwatch.StartNew();
-            var candidate = _inner.Nest(currentParts, materials, options, scaledProgress, cancellationToken);
-            sw.Stop();
-
-            LastSearchPasses++;
-            log.Add(new NestingPassResult
+        try
+        {
+            for (var pass = 0; pass < maxPasses && noImprovementCount < noImprovementLimit; pass++)
             {
-                Pass = pass + 1,
-                Sheets = candidate.Sheets.Count,
-                Unplaced = candidate.Unplaced.Count,
-                UtilizationPercent = candidate.TotalUtilizationPercent,
-                DurationMs = sw.ElapsedMilliseconds
-            });
+                cancellationToken.ThrowIfCancellationRequested();
 
-            if (best is null || NestingResultComparison.IsBetter(candidate, best))
-            {
-                best = candidate;
-                noImprovementCount = 0;
+                var combo = pass % (heuristics.Length * orientations.Length);
+                options.PlacementHeuristic = heuristics[combo / orientations.Length];
+                options.OrientationPreference = orientations[combo % orientations.Length];
+
+                var currentParts = pass == 0 ? parts : DeterministicPermutationSource.Permute(parts, baseSeed, pass);
+                var scaledProgress = progress is null ? null : new ScaledProgress(progress, pass, maxPasses);
+
+                var sw = Stopwatch.StartNew();
+                var candidate = _inner.Nest(currentParts, materials, options, scaledProgress, cancellationToken);
+                sw.Stop();
+
+                LastSearchPasses++;
+                log.Add(new NestingPassResult
+                {
+                    Pass = pass + 1,
+                    Sheets = candidate.Sheets.Count,
+                    Unplaced = candidate.Unplaced.Count,
+                    UtilizationPercent = candidate.TotalUtilizationPercent,
+                    DurationMs = sw.ElapsedMilliseconds,
+                    PlacementHeuristic = options.PlacementHeuristic,
+                    OrientationPreference = options.OrientationPreference
+                });
+
+                if (best is null || NestingResultComparison.IsBetter(candidate, best))
+                {
+                    best = candidate;
+                    noImprovementCount = 0;
+                }
+                else
+                {
+                    noImprovementCount++;
+                }
+
+                if (IsAcceptable(best, options))
+                    break;
             }
-            else
-            {
-                noImprovementCount++;
-            }
-
-            if (IsAcceptable(best, options))
-                break;
+        }
+        finally
+        {
+            options.PlacementHeuristic = originalPlacement;
+            options.OrientationPreference = originalOrientation;
         }
 
         LastPassLog = log;
@@ -122,15 +152,13 @@ public sealed class MultiPassNestingEngine : INestingEngine
 
             var sb = new StringBuilder();
             sb.AppendLine($"Nesting log — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"Total passes: {log.Count}");
             sb.AppendLine($"Best result: sheets={best.Sheets.Count}, unplaced={best.Unplaced.Count}, utilization={best.TotalUtilizationPercent:F2}%");
             sb.AppendLine();
             sb.AppendLine("Pass log:");
-            sb.AppendLine($"{"Pass",-6}{"Sheets",-10}{"Unplaced",-10}{"Utilization",-14}{"Duration ms"}");
 
             foreach (var entry in log)
-            {
-                sb.AppendLine($"Pass {entry.Pass,-4}{entry.Sheets,-10}{entry.Unplaced,-10}{entry.UtilizationPercent,-14:F2}{entry.DurationMs}");
-            }
+                sb.AppendLine(entry.ToString());
 
             File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
         }
