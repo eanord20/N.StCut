@@ -56,7 +56,14 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string ButtonFindFiles => this["ButtonFindFiles"];
     public string ButtonNest => this["ButtonNest"];
     public string ButtonExportDxf => this["ButtonExportDxf"];
+    public string ButtonRenestCurrentSheet => this["ButtonRenestCurrentSheet"];
     public string MenuExportCombinedDxf => this["MenuExportCombinedDxf"];
+    public string HintSheetMargin => this["HintSheetMargin"];
+    public string HintPartGap => this["HintPartGap"];
+    public string HintMaxSearchPasses => this["HintMaxSearchPasses"];
+    public string HintNoImprovementStopCount => this["HintNoImprovementStopCount"];
+    public string HintAcceptableMaxUnplaced => this["HintAcceptableMaxUnplaced"];
+    public string HintAcceptableMaxSheets => this["HintAcceptableMaxSheets"];
     public string SheetLabel => this["SheetLabel"];
     public string MaterialLabel => this["MaterialLabel"];
     public string NoGrain => this["NoGrain"];
@@ -146,7 +153,14 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ButtonFindFiles"] = "Find Files",
             ["ButtonNest"] = "Nest",
             ["ButtonExportDxf"] = "Export DXF",
+            ["ButtonRenestCurrentSheet"] = "Renest sheet",
             ["MenuExportCombinedDxf"] = "Combined DXF",
+            ["HintSheetMargin"] = "Margin between part edges and the sheet border.\nRecommended: 5–10 mm for plasma/oxy cutting, 0–2 mm for layout-only DXF.",
+            ["HintPartGap"] = "Minimum distance between placed parts.\nRecommended: material thickness + 1–2 mm, or kerf if cutting.",
+            ["HintMaxSearchPasses"] = "Maximum number of layout attempts.\nMore passes may find a better result but take longer.\nRecommended: 30–100.",
+            ["HintNoImprovementStopCount"] = "Stop early when the best result has not improved for this many passes.\n0 = never stop early.\nRecommended: 10–30.",
+            ["HintAcceptableMaxUnplaced"] = "If the best layout places all but this many parts, stop searching immediately.\n-1 to disable. Useful for quick 'good enough' results.",
+            ["HintAcceptableMaxSheets"] = "If the best layout uses no more than this many sheets, stop searching immediately.\n-1 to disable.",
             ["SheetLabel"] = "Sheet",
             ["MaterialLabel"] = "Material",
             ["NoGrain"] = "No grain",
@@ -235,7 +249,14 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ButtonFindFiles"] = "Знайти файли",
             ["ButtonNest"] = "Розкрій",
             ["ButtonExportDxf"] = "Експорт DXF",
+            ["ButtonRenestCurrentSheet"] = "Переразкроїти лист",
             ["MenuExportCombinedDxf"] = "Загальний DXF",
+            ["HintSheetMargin"] = "Відступ від краю листа до деталі.\nРекомендація: 5–10 мм для плазми/газу, 0–2 мм лише для розкладки DXF.",
+            ["HintPartGap"] = "Мінімальна відстань між деталями.\nРекомендація: товщина матеріалу + 1–2 мм, або ширина різу.",
+            ["HintMaxSearchPasses"] = "Максимальна кількість спроб розкладу.\nБільше — кращий результат, але довше.\nРекомендація: 30–100.",
+            ["HintNoImprovementStopCount"] = "Зупинитися, якщо результат не покращився за вказану кількість проходів.\n0 — не зупинятися раніше.\nРекомендація: 10–30.",
+            ["HintAcceptableMaxUnplaced"] = "Зупинитися, якщо залишилось не більше вказаної кількості нерозміщених деталей.\n-1 — вимкнено. Корисно для швидкого 'достатньо хорошого' результату.",
+            ["HintAcceptableMaxSheets"] = "Зупинитися, якщо використано не більше вказаної кількості листів.\n-1 — вимкнено.",
             ["SheetLabel"] = "Лист",
             ["MaterialLabel"] = "Матеріал",
             ["NoGrain"] = "Без текстури",

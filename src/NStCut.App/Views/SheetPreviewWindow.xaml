@@ -23,9 +23,10 @@
                 <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelZoom}" />
                 <Slider Value="{Binding Zoom, Mode=TwoWay}" Minimum="0.1" Maximum="2.0" TickFrequency="0.1" Width="120" VerticalAlignment="Center" Margin="6,0" />
                 <TextBlock VerticalAlignment="Center" Text="{Binding Zoom, StringFormat='{}{0:P0}'}" />
+                <Button Command="{Binding RenestCurrentSheetCommand}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonRenestCurrentSheet}" Margin="8,0,0,0" />
             </ToolBar>
         </ToolBarTray>
-        <TabControl Grid.Row="1" ItemsSource="{Binding Sheets}">
+        <TabControl Grid.Row="1" ItemsSource="{Binding Sheets}" SelectedItem="{Binding SelectedSheet, Mode=TwoWay}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}">
             <TabControl.ItemTemplate>
                 <DataTemplate>
                     <TextBlock>

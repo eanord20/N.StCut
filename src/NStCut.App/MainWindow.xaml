@@ -105,19 +105,62 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="60" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelSheetMargin}" />
                             <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SheetMarginMm, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintSheetMargin}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                             <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelPartGap}" />
                             <TextBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,0" Text="{Binding PartGapMm, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintPartGap}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                             <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelMaxSearchPasses}" />
                             <TextBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,0" Text="{Binding MaxSearchPasses, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintMaxSearchPasses}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                             <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelNoImprovementStopCount}" />
                             <TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,0" Text="{Binding NoImprovementStopCount, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintNoImprovementStopCount}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                             <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxUnplaced}" />
                             <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxUnplaced, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintAcceptableMaxUnplaced}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                             <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxSheets}" />
                             <TextBox Grid.Row="5" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxSheets, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320">
+                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintAcceptableMaxSheets}" TextWrapping="Wrap" />
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
                         </Grid>
                     </MenuItem.Header>
                 </MenuItem>

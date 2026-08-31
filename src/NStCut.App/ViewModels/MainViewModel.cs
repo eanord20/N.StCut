@@ -60,6 +60,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int _acceptableMaxUnplaced = DefaultNestingOptions.Value.AcceptableMaxUnplaced;
     private int _acceptableMaxSheets = DefaultNestingOptions.Value.AcceptableMaxSheets;
     private string? _lastNestingLogPath;
+    private readonly string _sessionLogPath;
     private bool _suspendRecompute;
     private bool _loadingSettings;
     private bool _exportCombinedDxf;
@@ -93,6 +94,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _projectService = projectService ?? new ProjectFileService();
         _appSettingsService = appSettingsService ?? new AppSettingsService();
         _exportFileNameService = exportFileNameService ?? new ExportFileNameService();
+        _sessionLogPath = BuildSessionLogPath();
 
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
         // Группируем с конвертацией MaterialId -> имя материала сразу здесь (простой IValueConverter,
@@ -1121,9 +1123,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             var result = await NestAsync();
+            var previewOptions = CreateNestingOptions();
+            previewOptions.LogFilePath = null;
             var preview = new NStCut.App.Views.SheetPreviewWindow
             {
-                DataContext = new SheetPreviewViewModel(result),
+                DataContext = new SheetPreviewViewModel(result, _nestingEngine, previewOptions),
                 Owner = Application.Current.MainWindow
             };
             preview.Show();
@@ -1324,13 +1328,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         };
     }
 
-    private string BuildNestingLogPath()
+    private static string BuildSessionLogPath()
     {
         var logsDir = Path.Combine(AppPaths.RootFolder, "nesting_logs");
         Directory.CreateDirectory(logsDir);
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var path = Path.Combine(logsDir, $"nesting_log_{timestamp}.txt");
-        LastNestingLogPath = path;
-        return path;
+        return Path.Combine(logsDir, $"nesting_session_{timestamp}.txt");
+    }
+
+    private string BuildNestingLogPath()
+    {
+        LastNestingLogPath = _sessionLogPath;
+        return _sessionLogPath;
     }
 }

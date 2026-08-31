@@ -160,7 +160,7 @@ public sealed class MultiPassNestingEngine : INestingEngine
             foreach (var entry in log)
                 sb.AppendLine(entry.ToString());
 
-            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+            File.AppendAllText(path, sb.ToString(), Encoding.UTF8);
         }
         catch
         {

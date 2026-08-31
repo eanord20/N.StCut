@@ -2,16 +2,22 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
+using NStCut.App.Commands;
 using NStCut.App.Services;
 using NStCut.Core.Constants;
+using NStCut.Core.Contracts;
 using NStCut.Core.Geometry;
 using NStCut.Core.Models;
+using NStCut.Core.Nesting;
 
 namespace NStCut.App.ViewModels;
 
 public sealed class SheetPreviewViewModel : INotifyPropertyChanged
 {
     private double _zoom = 1.0;
+    private SheetPreviewItemViewModel? _selectedSheet;
+    private int _selectedIndex;
 
     public ObservableCollection<SheetPreviewItemViewModel> Sheets { get; } = new();
 
@@ -25,10 +31,127 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
         }
     }
 
-    public SheetPreviewViewModel(NestingResult result)
+    public SheetPreviewItemViewModel? SelectedSheet
     {
-        foreach (var sheet in result.Sheets)
-            Sheets.Add(new SheetPreviewItemViewModel(sheet));
+        get => _selectedSheet;
+        set
+        {
+            _selectedSheet = value;
+            OnPropertyChanged();
+            UpdateSelectedIndex();
+        }
+    }
+
+    public int SelectedIndex
+    {
+        get => _selectedIndex;
+        set
+        {
+            _selectedIndex = value;
+            OnPropertyChanged();
+            UpdateSelectedSheet();
+        }
+    }
+
+    public ICommand RenestCurrentSheetCommand { get; }
+    public ICommand FitToWindowCommand { get; }
+
+    public bool CanRenest => _nestingEngine is not null && _options is not null;
+
+    private readonly INestingEngine? _nestingEngine;
+    private readonly NestingOptions? _options;
+
+    public SheetPreviewViewModel(NestingResult result, INestingEngine? nestingEngine = null, NestingOptions? options = null)
+    {
+        _nestingEngine = nestingEngine;
+        _options = options;
+
+        for (var i = 0; i < result.Sheets.Count; i++)
+            Sheets.Add(new SheetPreviewItemViewModel(result.Sheets[i]));
+
+        if (Sheets.Count > 0)
+        {
+            SelectedSheet = Sheets[0];
+            _selectedIndex = 0;
+        }
+
+        RenestCurrentSheetCommand = new RelayCommand(_ => RenestCurrentSheet(), _ => CanRenest && SelectedSheet is not null);
+        FitToWindowCommand = new RelayCommand(_ => Zoom = 1.0);
+    }
+
+    private void RenestCurrentSheet()
+    {
+        if (SelectedSheet is null || _nestingEngine is null || _options is null)
+            return;
+
+        var originalIndex = SelectedIndex;
+        if (originalIndex < 0 || originalIndex >= Sheets.Count)
+            return;
+
+        var selected = SelectedSheet.Sheet;
+
+        // Group placed parts by their source Part and build a Part list with the same overall quantity.
+        var parts = selected.Parts
+            .GroupBy(p => p.Source)
+            .Select(g =>
+            {
+                var clone = g.Key.Clone();
+                clone.Quantity = g.Count();
+                return clone;
+            })
+            .ToList();
+
+        var renestOptions = new NestingOptions
+        {
+            PartGapMm = _options.PartGapMm,
+            SheetMarginMm = _options.SheetMarginMm,
+            Resolution = _options.Resolution,
+            MaxSearchPasses = Math.Min(_options.MaxSearchPasses, 16),
+            NoImprovementStopCount = Math.Min(_options.NoImprovementStopCount, 4),
+            AcceptableMaxUnplaced = _options.AcceptableMaxUnplaced,
+            AcceptableMaxSheets = _options.AcceptableMaxSheets,
+            LogFilePath = null
+        };
+
+        var result = _nestingEngine.Nest(parts, new[] { selected.Material }, renestOptions);
+
+        if (result.Sheets.Count == 1 && result.Unplaced.Count == 0)
+        {
+            result.Sheets[0].Index = selected.Index;
+            var replacement = new SheetPreviewItemViewModel(result.Sheets[0]);
+            Sheets[originalIndex] = replacement;
+            SelectedSheet = replacement;
+            OnPropertyChanged(nameof(Sheets));
+        }
+    }
+
+    private void UpdateSelectedIndex()
+    {
+        if (_selectedSheet is null)
+        {
+            _selectedIndex = -1;
+            OnPropertyChanged(nameof(SelectedIndex));
+            return;
+        }
+
+        for (var i = 0; i < Sheets.Count; i++)
+        {
+            if (Sheets[i] == _selectedSheet)
+            {
+                _selectedIndex = i;
+                OnPropertyChanged(nameof(SelectedIndex));
+                return;
+            }
+        }
+    }
+
+    private void UpdateSelectedSheet()
+    {
+        if (_selectedIndex >= 0 && _selectedIndex < Sheets.Count)
+        {
+            _selectedSheet = Sheets[_selectedIndex];
+            OnPropertyChanged(nameof(SelectedSheet));
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
