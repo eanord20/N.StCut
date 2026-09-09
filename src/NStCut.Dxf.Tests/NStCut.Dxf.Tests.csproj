@@ -25,4 +25,10 @@
     <ProjectReference Include="..\NStCut.Core\NStCut.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Corpus\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

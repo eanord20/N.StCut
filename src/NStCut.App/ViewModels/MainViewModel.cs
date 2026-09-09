@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Linq;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -41,6 +42,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly IDxfExportService _dxfExport;
     private readonly IReportService _reportService;
     private readonly IExportFileNameService _exportFileNameService;
+    private readonly IMaterialsLibraryService _materialsLibraryService;
 
     private string _searchPath = string.Empty;
     private string _outputPath = string.Empty;
@@ -66,7 +68,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _exportCombinedDxf;
     private AppTheme _currentTheme = AppTheme.Light;
 
-    private readonly LinkedList<List<PartRow>> _undoStack = new();
+    private sealed class Snapshot(List<PartRow> rows, List<MaterialRow> materials)
+    {
+        public List<PartRow> Rows { get; } = rows;
+        public List<MaterialRow> Materials { get; } = materials;
+    }
+
+    private readonly LinkedList<Snapshot> _undoStack = new();
     // Полное клонирование всего списка деталей на каждый снэпшот сохранено намеренно (не переходим
     // на дельта-модель — см. docs/Refactoring_Plan.md, Conflict Resolution, п.1: корректность важнее
     // производительности согласно приоритетам AGENTS.md). Единственная безопасная оптимизация без
@@ -81,7 +89,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IFileResolveService? fileResolveService = null,
         IProjectFileService? projectService = null,
         IAppSettingsService? appSettingsService = null,
-        IExportFileNameService? exportFileNameService = null)
+        IExportFileNameService? exportFileNameService = null,
+        IMaterialsLibraryService? materialsLibraryService = null)
     {
         _nestingEngine = nestingEngine;
         _dxfGeometry = dxfGeometry;
@@ -94,6 +103,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _projectService = projectService ?? new ProjectFileService();
         _appSettingsService = appSettingsService ?? new AppSettingsService();
         _exportFileNameService = exportFileNameService ?? new ExportFileNameService();
+        _materialsLibraryService = materialsLibraryService ?? new MaterialsLibraryService();
         _sessionLogPath = BuildSessionLogPath();
 
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
@@ -138,6 +148,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IncreaseQuantityCommand = new RelayCommand(row => (row as PartRow)?.IncreaseQuantity());
         DecreaseQuantityCommand = new RelayCommand(row => (row as PartRow)?.DecreaseQuantity());
         SetActiveMaterialCommand = new RelayCommand(param => SetActiveMaterial(param as string));
+        DeleteMaterialCommand = new RelayCommand(param => DeleteMaterial(param as string), param => param is string id && Materials.Any(m => m.Id == id));
+        AddMaterialCommand = new RelayCommand(param => AddMaterial(param));
         SetLanguageCommand = new RelayCommand(lang => SetLanguage(lang));
         SetThemeCommand = new RelayCommand(theme => SetTheme(theme));
 
@@ -161,12 +173,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var settings = _appSettingsService.Load();
             if (!string.IsNullOrWhiteSpace(settings.SearchPath)) SearchPath = settings.SearchPath;
             if (!string.IsNullOrWhiteSpace(settings.OutputPath)) OutputPath = settings.OutputPath;
-            if (settings.SheetMarginMm > 0) SheetMarginMm = settings.SheetMarginMm;
-            if (settings.PartGapMm > 0) PartGapMm = settings.PartGapMm;
-            if (settings.MaxSearchPasses > 0) MaxSearchPasses = settings.MaxSearchPasses;
-            if (settings.NoImprovementStopCount >= 0) NoImprovementStopCount = settings.NoImprovementStopCount;
-            AcceptableMaxUnplaced = settings.AcceptableMaxUnplaced;
-            AcceptableMaxSheets = settings.AcceptableMaxSheets;
+            if (double.IsFinite(settings.SheetMarginMm) && settings.SheetMarginMm >= 0)
+                SheetMarginMm = settings.SheetMarginMm;
+            if (double.IsFinite(settings.PartGapMm) && settings.PartGapMm >= 0)
+                PartGapMm = settings.PartGapMm;
+            // MaxSearchPasses / NoImprovementStopCount / AcceptableMax* are hidden from the UI
+            // and always use the quality-oriented defaults from AppConstants.
             if (!string.IsNullOrWhiteSpace(settings.Culture)) _localization.Culture = settings.Culture;
             _currentTheme = ThemeService.TryParse(settings.Theme, out var theme) ? theme : AppTheme.Light;
             ThemeService.Apply(_currentTheme);
@@ -240,10 +252,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _sheetMarginMm;
         set
         {
-            _sheetMarginMm = Math.Max(0, value);
+            _sheetMarginMm = double.IsFinite(value) ? Math.Max(0, value) : 0;
             OnPropertyChanged();
             if (!_loadingSettings)
             {
+                InvalidateNestingResult();
                 RecomputeOversizedForAll();
                 UpdateStatusTextForSelection();
                 SaveAppSettings();
@@ -257,10 +270,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _partGapMm;
         set
         {
-            _partGapMm = Math.Max(0, value);
+            _partGapMm = double.IsFinite(value) ? Math.Max(0, value) : 0;
             OnPropertyChanged();
             if (!_loadingSettings)
             {
+                InvalidateNestingResult();
                 RecomputeOversizedForAll();
                 UpdateStatusTextForSelection();
                 SaveAppSettings();
@@ -277,7 +291,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _maxSearchPasses = Math.Max(1, value);
             OnPropertyChanged();
             if (!_loadingSettings)
+            {
+                InvalidateNestingResult();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -290,7 +307,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _noImprovementStopCount = Math.Max(0, value);
             OnPropertyChanged();
             if (!_loadingSettings)
+            {
+                InvalidateNestingResult();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -303,7 +323,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _acceptableMaxUnplaced = value;
             OnPropertyChanged();
             if (!_loadingSettings)
+            {
+                InvalidateNestingResult();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -316,7 +339,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _acceptableMaxSheets = value;
             OnPropertyChanged();
             if (!_loadingSettings)
+            {
+                InvalidateNestingResult();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -409,8 +435,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand IncreaseQuantityCommand { get; }
     public ICommand DecreaseQuantityCommand { get; }
     public ICommand SetActiveMaterialCommand { get; }
+    public ICommand DeleteMaterialCommand { get; }
+    public ICommand AddMaterialCommand { get; }
     public ICommand SetLanguageCommand { get; }
     public ICommand SetThemeCommand { get; }
+
+    public IEnumerable<SheetMaterial> AvailableLibraryMaterials
+        => _materialsLibraryService.Load()
+            .Where(m => Materials.All(pm => pm.Id != m.Id))
+            .OrderBy(m => m.Name);
 
     /// <summary>Кеш позиции материала в проектном списке — избавляет от линейного поиска на каждое
     /// сравнение при сортировке таблицы (docs/Audit_Performance.md, issue P5). Сбрасывается при любом
@@ -444,6 +477,52 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var match = Materials.FirstOrDefault(m => m.Id == idOrName) ?? Materials.FirstOrDefault(m => m.Name == idOrName);
         ActivePasteMaterialId = match?.Id ?? idOrName;
+    }
+
+    private void DeleteMaterial(string? materialId)
+    {
+        if (string.IsNullOrWhiteSpace(materialId))
+            return;
+
+        var material = Materials.FirstOrDefault(m => m.Id == materialId);
+        if (material == null)
+            return;
+
+        var result = MessageBox.Show(
+            string.Format(_localization.ConfirmDeleteMaterialMessage, material.Name),
+            _localization.ConfirmDeleteMaterialTitle,
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.OK)
+            return;
+
+        PushUndoSnapshot();
+        Materials.Remove(material);
+
+        for (var i = Rows.Count - 1; i >= 0; i--)
+        {
+            if (Rows[i].MaterialId == materialId)
+                Rows.RemoveAt(i);
+        }
+
+        if (ActivePasteMaterialId == materialId)
+            ActivePasteMaterialId = Materials.FirstOrDefault()?.Id;
+
+        OnPropertyChanged(nameof(AvailableLibraryMaterials));
+    }
+
+    private void AddMaterial(object? parameter)
+    {
+        if (parameter is not SheetMaterial sheetMaterial)
+            return;
+
+        if (Materials.Any(m => m.Id == sheetMaterial.Id))
+            return;
+
+        PushUndoSnapshot();
+        Materials.Add(MaterialRow.FromMaterial(sheetMaterial));
+        ActivePasteMaterialId ??= sheetMaterial.Id;
+        OnPropertyChanged(nameof(AvailableLibraryMaterials));
     }
 
     /// <summary>Переносит строку в раздел другого материала (используется при Drag&amp;Drop строки между разделами).</summary>
@@ -503,15 +582,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         _materialOrderCache = null; // состав/порядок материалов изменился — кеш порядка невалиден (RF-020)
+        InvalidateNestingResult();
         RecomputeSectionNumbers();
         RecomputeCanNest();
         RecomputeOversizedForAll();
         RowsView.Refresh();
         CommandManager.InvalidateRequerySuggested();
+        OnPropertyChanged(nameof(AvailableLibraryMaterials));
     }
 
     private void OnMaterialPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        InvalidateNestingResult();
         RecomputeOversizedForAll();
     }
 
@@ -546,6 +628,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void OnRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         var row = sender as PartRow;
+        if (e.PropertyName is nameof(PartRow.IsEnabled) or nameof(PartRow.Quantity) or
+            nameof(PartRow.Number) or nameof(PartRow.Title) or nameof(PartRow.MaterialId) or
+            nameof(PartRow.DxfPath) or nameof(PartRow.Status) or nameof(PartRow.IsManuallyResolved) or
+            nameof(PartRow.GrainMode) or nameof(PartRow.CanRotate) or nameof(PartRow.Bounds))
+            InvalidateNestingResult();
+
         switch (e.PropertyName)
         {
             case nameof(PartRow.MaterialId):
@@ -571,6 +659,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void OnRowsChanged()
     {
+        InvalidateNestingResult();
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(FoundCount));
         OnPropertyChanged(nameof(NotFoundCount));
@@ -591,6 +680,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _canNestCache = !IsBusy && Rows.Count > 0 && Materials.Count > 0 &&
                         Rows.Any(r => !string.IsNullOrWhiteSpace(r.MaterialId));
+    }
+
+    private void InvalidateNestingResult()
+    {
+        if (_nestingResult == null)
+            return;
+
+        _nestingResult = null;
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void RecomputeOversized(PartRow row)
@@ -678,7 +776,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         while (_undoStack.Count >= MaxUndoDepth)
             _undoStack.RemoveFirst();
-        _undoStack.AddLast(Rows.Select(r => r.Clone()).ToList());
+        _undoStack.AddLast(new Snapshot(Rows.Select(r => r.Clone()).ToList(), Materials.ToList()));
         ((RelayCommand)UndoCommand).RaiseCanExecuteChanged();
     }
 
@@ -690,13 +788,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _suspendRecompute = true;
         try
         {
+            Materials.Clear();
+            foreach (var material in snapshot.Materials)
+                Materials.Add(material);
+
             Rows.Clear();
         }
         finally
         {
             _suspendRecompute = false;
         }
-        AddRowsBatch(snapshot);
+        AddRowsBatch(snapshot.Rows);
+        ActivePasteMaterialId = Materials.FirstOrDefault()?.Id;
+        OnPropertyChanged(nameof(AvailableLibraryMaterials));
         ((RelayCommand)UndoCommand).RaiseCanExecuteChanged();
     }
 
@@ -776,9 +880,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void ApplyDxfToRowCore(PartRow row, string path)
     {
         row.DxfPath = path;
-        var ok = UpdateRowBounds(row);
-        row.IsManuallyResolved = ok;
-        row.Status = ok ? PartStatus.ManuallySelected : PartStatus.NotFound;
+        UpdateRowBounds(row, out var contourRead);
+        row.IsManuallyResolved = contourRead;
+        row.Status = contourRead ? PartStatus.ManuallySelected : PartStatus.NotFound;
         RecomputeOversized(row);
     }
 
@@ -853,22 +957,66 @@ public sealed class MainViewModel : INotifyPropertyChanged
             SelectFileManually(row);
     }
 
-    private bool UpdateRowBounds(PartRow row)
+    private string FormatGeometryDiagnostics(DxfContour contour) =>
+        FormatGeometryDiagnostics(contour.Quality, contour.Diagnostics.Select(d => d.Code));
+
+    private string FormatGeometryDiagnostics(
+        DxfGeometryQuality quality,
+        IEnumerable<DxfGeometryDiagnosticCode> diagnostics)
     {
+        var codes = diagnostics.ToList();
+        if (codes.Count == 0)
+            return QualitySummary(quality);
+        return string.Join(Environment.NewLine, codes.Select(MapDiagnosticCode));
+    }
+
+    private string MapDiagnosticCode(DxfGeometryDiagnosticCode code) => code switch
+    {
+        DxfGeometryDiagnosticCode.UnsupportedEntity => _localization["GeometryDiagnosticUnsupportedEntity"],
+        DxfGeometryDiagnosticCode.ClosedStateUnavailable => _localization["GeometryDiagnosticClosedStateUnavailable"],
+        DxfGeometryDiagnosticCode.BulgeUnavailable => _localization["GeometryDiagnosticBulgeUnavailable"],
+        DxfGeometryDiagnosticCode.InvalidClosedLoop => _localization["GeometryDiagnosticInvalidClosedLoop"],
+        DxfGeometryDiagnosticCode.NoClosedContour => _localization["GeometryDiagnosticNoClosedContour"],
+        DxfGeometryDiagnosticCode.NoUsableBounds => _localization["GeometryDiagnosticNoUsableBounds"],
+        _ => code.ToString()
+    };
+
+    private string QualitySummary(DxfGeometryQuality quality) => quality switch
+    {
+        DxfGeometryQuality.Partial => _localization["GeometryQualityPartial"],
+        DxfGeometryQuality.BoundsOnly => _localization["GeometryQualityBoundsOnly"],
+        DxfGeometryQuality.Invalid => _localization["GeometryQualityInvalid"],
+        _ => string.Empty
+    };
+
+    private bool UpdateRowBounds(PartRow row, out bool contourRead)
+    {
+        contourRead = false;
         if (string.IsNullOrWhiteSpace(row.DxfPath) || !File.Exists(row.DxfPath))
         {
             row.Bounds = default;
+            row.GeometryQuality = DxfGeometryQuality.Invalid;
+            row.GeometryDiagnostics = new List<DxfGeometryDiagnosticCode>();
+            row.GeometryDiagnosticText = _localization["GeometryQualityInvalid"];
             return false;
         }
         try
         {
             var contour = _dxfGeometry.ReadContour(row.DxfPath);
-            row.Bounds = contour.Bounds;
-            return true;
+            contourRead = true;
+            row.GeometryQuality = contour.Quality;
+            row.GeometryDiagnostics = contour.Diagnostics.Select(d => d.Code).ToList();
+            row.GeometryDiagnosticText = FormatGeometryDiagnostics(contour);
+            var hasValidBounds = contour.HasUsableBounds && contour.Quality != DxfGeometryQuality.Invalid;
+            row.Bounds = hasValidBounds ? contour.Bounds : default;
+            return hasValidBounds;
         }
         catch (Exception)
         {
             row.Bounds = default;
+            row.GeometryQuality = DxfGeometryQuality.Invalid;
+            row.GeometryDiagnostics = new List<DxfGeometryDiagnosticCode>();
+            row.GeometryDiagnosticText = _localization["GeometryQualityInvalid"];
             return false;
         }
     }
@@ -886,7 +1034,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 var result = _fileResolveService.Resolve(row.DisplayName, allDxfFiles);
                 row.Status = result.Status;
                 row.DxfPath = result.Path;
-                UpdateRowBounds(row);
+                UpdateRowBounds(row, out _);
                 RecomputeOversized(row);
                 if (result.Status == PartStatus.Ambiguous)
                     ambiguousDetails.Add($"{row.DisplayName} ({result.Candidates.Count})");
@@ -991,7 +1139,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     // (см. docs/Audit_Performance.md, issue P2). После await продолжение выполняется на UI-потоке
     // (SynchronizationContext WPF), поэтому обращения к StatusText/ProgressValue/созданию окна ниже безопасны.
     internal sealed record NestingInput(int RowIndex, Part Part);
-    internal sealed record RowNestingUpdate(int RowIndex, NStCut.Core.Geometry.Rect Bounds, PartStatus Status);
+    internal sealed record RowNestingUpdate(
+        int RowIndex,
+        NStCut.Core.Geometry.Rect Bounds,
+        PartStatus Status,
+        DxfGeometryQuality GeometryQuality,
+        IReadOnlyList<DxfGeometryDiagnosticCode> GeometryDiagnostics);
     internal sealed record NestingWorkResult(NestingResult Result, IReadOnlyList<RowNestingUpdate> Updates);
 
     internal NestingWorkResult PerformNesting(
@@ -1010,7 +1163,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var part = input.Part;
             if (string.IsNullOrWhiteSpace(part.DxfPath) || !File.Exists(part.DxfPath))
             {
-                AddInvalidPart(input, invalidParts, updates);
+                AddInvalidPart(input, invalidParts, updates, null);
                 continue;
             }
 
@@ -1018,11 +1171,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 var contour = _dxfGeometry.ReadContour(part.DxfPath);
                 part.Bounds = contour.Bounds;
-                part.Area = contour.Bounds.Area;
+                part.Contour = contour.Polygon;
+                part.Holes = contour.Holes;
+                part.Area = contour.TrueArea;
 
-                if (contour.Bounds.Width <= 0 || contour.Bounds.Height <= 0)
+                if (contour.Quality == DxfGeometryQuality.Invalid || !contour.HasUsableBounds)
                 {
-                    AddInvalidPart(input, invalidParts, updates);
+                    AddInvalidPart(input, invalidParts, updates, contour);
                     continue;
                 }
 
@@ -1031,7 +1186,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     var fit = SheetFitEvaluator.Evaluate(part, material, options);
                     if (fit.IsOversized)
                     {
-                        updates.Add(new RowNestingUpdate(input.RowIndex, contour.Bounds, part.Status));
+                        updates.Add(new RowNestingUpdate(
+                            input.RowIndex,
+                            contour.Bounds,
+                            part.Status,
+                            contour.Quality,
+                            contour.Diagnostics.Select(d => d.Code).ToList()));
                         for (var copyIndex = 0; copyIndex < Math.Max(0, part.Quantity); copyIndex++)
                         {
                             var copy = part.Clone();
@@ -1042,12 +1202,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     }
                 }
 
-                updates.Add(new RowNestingUpdate(input.RowIndex, contour.Bounds, part.Status));
+                updates.Add(new RowNestingUpdate(
+                    input.RowIndex,
+                    contour.Bounds,
+                    part.Status,
+                    contour.Quality,
+                    contour.Diagnostics.Select(d => d.Code).ToList()));
                 validParts.Add(part);
             }
             catch (Exception)
             {
-                AddInvalidPart(input, invalidParts, updates);
+                AddInvalidPart(input, invalidParts, updates, null);
             }
         }
 
@@ -1065,9 +1230,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private static void AddInvalidPart(
         NestingInput input,
         ICollection<Part> invalidParts,
-        ICollection<RowNestingUpdate> updates)
+        ICollection<RowNestingUpdate> updates,
+        DxfContour? contour)
     {
-        updates.Add(new RowNestingUpdate(input.RowIndex, default, PartStatus.NotFound));
+        var diagnostics = contour?.Diagnostics.Select(d => d.Code).ToList()
+            ?? new List<DxfGeometryDiagnosticCode>();
+        var status = contour != null ? input.Part.Status : PartStatus.NotFound;
+        updates.Add(new RowNestingUpdate(
+            input.RowIndex,
+            default,
+            status,
+            DxfGeometryQuality.Invalid,
+            diagnostics));
         for (var copyIndex = 0; copyIndex < Math.Max(0, input.Part.Quantity); copyIndex++)
         {
             var copy = input.Part.Clone();
@@ -1075,7 +1249,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             copy.Bounds = default;
             copy.Area = 0;
             copy.Contour = null;
-            copy.Status = PartStatus.NotFound;
+            copy.Status = status;
             invalidParts.Add(copy);
         }
     }
@@ -1101,13 +1275,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 var row = rowReferences[update.RowIndex];
                 row.Bounds = update.Bounds;
                 row.Status = update.Status;
+                row.GeometryQuality = update.GeometryQuality;
+                row.GeometryDiagnostics = update.GeometryDiagnostics;
+                row.GeometryDiagnosticText = FormatGeometryDiagnostics(
+                    update.GeometryQuality,
+                    update.GeometryDiagnostics);
             }
 
             RecomputeOversizedForAll();
             UpdateStatusTextForSelection();
 
             _nestingResult = work.Result;
-            StatusText = $"Sheets: {_nestingResult.Sheets.Count}, unplaced: {_nestingResult.Unplaced.Count}";
+            var existingStatus = $"Sheets: {_nestingResult.Sheets.Count}, unplaced: {_nestingResult.Unplaced.Count}";
+            var simplifiedCount = work.Updates
+                .Where(update => update.GeometryQuality is DxfGeometryQuality.Partial or DxfGeometryQuality.BoundsOnly)
+                .Select(update => update.RowIndex)
+                .Distinct()
+                .Count();
+            StatusText = simplifiedCount > 0
+                ? $"{existingStatus} {string.Format(_localization["GeometrySimplifiedCountFormat"], simplifiedCount)}"
+                : existingStatus;
             ((RelayCommand)ExportDxfCommand).RaiseCanExecuteChanged();
             ((RelayCommand)ExportReportCommand).RaiseCanExecuteChanged();
             return work.Result;
@@ -1125,9 +1312,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var result = await NestAsync();
             var previewOptions = CreateNestingOptions();
             previewOptions.LogFilePath = null;
+            var parts = Rows.Where(r => r.IsEnabled).Select(r => r.ToPart()).ToList();
+            var materials = Materials.Select(m => m.ToMaterial()).ToList();
             var preview = new NStCut.App.Views.SheetPreviewWindow
             {
-                DataContext = new SheetPreviewViewModel(result, _nestingEngine, previewOptions),
+                DataContext = new SheetPreviewViewModel(
+                    result, _nestingEngine, previewOptions,
+                    _dxfExport, _reportService, _exportFileNameService,
+                    OutputPath, ProjectName, parts, materials),
                 Owner = Application.Current.MainWindow
             };
             preview.Show();
@@ -1193,7 +1385,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void ExportReport()
+    private async void ExportReport()
     {
         if (_nestingResult == null || string.IsNullOrWhiteSpace(OutputPath)) return;
         IsBusy = true;
@@ -1212,7 +1404,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _localization.NoGrain,
                 _localization.GrainHorizontal,
                 _localization.GrainVertical);
-            _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels);
+            await Task.Run(() =>
+                _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels));
             _lastReportPath = path;
             ((RelayCommand)OpenReportCommand).RaiseCanExecuteChanged();
             StatusText = $"Report saved: {path}";
