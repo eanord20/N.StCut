@@ -98,6 +98,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string ButtonDeleteRow => this["ButtonDeleteRow"];
     public string ButtonCopyMaterial => this["ButtonCopyMaterial"];
     public string TooltipCopyMaterial => this["TooltipCopyMaterial"];
+    public string TooltipResolveDxf => this["TooltipResolveDxf"];
     public string ButtonSelectFileManually => this["ButtonSelectFileManually"];
     public string ButtonOpenDxfFolder => this["ButtonOpenDxfFolder"];
     public string ButtonOpenReport => this["ButtonOpenReport"];
@@ -109,7 +110,11 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string ContextMenuDeleteRow => this["ContextMenuDeleteRow"];
     public string TooltipActiveMaterial => this["TooltipActiveMaterial"];
     public string SectionSourceDestination => this["SectionSourceDestination"];
-    public string SectionDetails => this["SectionDetails"];
+    public string SectionMaterials => this["SectionMaterials"];
+    public string TooltipAddMaterial => this["TooltipAddMaterial"];
+    public string TooltipRemoveMaterial => this["TooltipRemoveMaterial"];
+    public string ConfirmDeleteMaterialTitle => this["ConfirmDeleteMaterialTitle"];
+    public string ConfirmDeleteMaterialMessage => this["ConfirmDeleteMaterialMessage"];
     public string ErrorTitleNesting => this["ErrorTitleNesting"];
     public string ErrorTitleExport => this["ErrorTitleExport"];
     public string ErrorTitleSave => this["ErrorTitleSave"];
@@ -128,6 +133,29 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string SheetPreviewFormat => this["SheetPreviewFormat"];
     public string StatusOversizedFormat => this["StatusOversizedFormat"];
     public string StatusOversizedGrainBlockedFormat => this["StatusOversizedGrainBlockedFormat"];
+
+    public string MenuEnglish => this["MenuEnglish"];
+    public string MenuUkrainian => this["MenuUkrainian"];
+    public string MenuThemeLight => this["MenuThemeLight"];
+    public string MenuThemeDark => this["MenuThemeDark"];
+    public string MaterialsWindowTitle => this["MaterialsWindowTitle"];
+    public string LabelLibrary => this["LabelLibrary"];
+    public string LabelInProject => this["LabelInProject"];
+    public string ButtonAdd => this["ButtonAdd"];
+    public string ButtonDelete => this["ButtonDelete"];
+    public string ButtonUp => this["ButtonUp"];
+    public string ButtonDown => this["ButtonDown"];
+    public string ColumnName => this["ColumnName"];
+    public string ColumnLength => this["ColumnLength"];
+    public string ColumnWidth => this["ColumnWidth"];
+    public string ColumnThickness => this["ColumnThickness"];
+    public string ColumnHasGrain => this["ColumnHasGrain"];
+    public string ColumnCopy => this["ColumnCopy"];
+    public string ColumnRotation => this["ColumnRotation"];
+    public string ColumnX => this["ColumnX"];
+    public string ColumnY => this["ColumnY"];
+    public string ColumnW => this["ColumnW"];
+    public string ColumnH => this["ColumnH"];
 
     private LocalizationService()
     {
@@ -195,6 +223,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ButtonDeleteRow"] = "Delete Row",
             ["ButtonCopyMaterial"] = "Copy",
             ["TooltipCopyMaterial"] = "Copy selected material",
+            ["TooltipResolveDxf"] = "Click to select or resolve DXF file",
             ["ButtonSelectFileManually"] = "Select File Manually",
             ["ButtonOpenDxfFolder"] = "Open DXF",
             ["ButtonOpenReport"] = "Open Report",
@@ -206,7 +235,11 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ContextMenuDeleteRow"] = "Delete row",
             ["TooltipActiveMaterial"] = "Click to make this material the active paste target",
             ["SectionSourceDestination"] = "Source / destination",
-            ["SectionDetails"] = "Parts",
+            ["SectionMaterials"] = "Materials",
+            ["TooltipAddMaterial"] = "Add material from library",
+            ["TooltipRemoveMaterial"] = "Remove material and its parts",
+            ["ConfirmDeleteMaterialTitle"] = "Remove material",
+            ["ConfirmDeleteMaterialMessage"] = "Delete material '{0}' and all its parts?",
             ["ErrorTitleNesting"] = "Nesting error",
             ["ErrorTitleExport"] = "Export error",
             ["ErrorTitleSave"] = "Save error",
@@ -224,7 +257,39 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["SheetPreviewTabFormat"] = "Sheet {0}",
             ["SheetPreviewFormat"] = "{0}  {1}x{2} mm  utilization {3:F1}%",
             ["StatusOversizedFormat"] = "Oversized: part {0:F1} × {1:F1} mm does not fit in usable sheet {2:F1} × {3:F1} mm.",
-            ["StatusOversizedGrainBlockedFormat"] = "Oversized: part {0:F1} × {1:F1} mm does not fit in usable sheet {2:F1} × {3:F1} mm (rotation blocked by grain)."
+            ["StatusOversizedGrainBlockedFormat"] = "Oversized: part {0:F1} × {1:F1} mm does not fit in usable sheet {2:F1} × {3:F1} mm (rotation blocked by grain).",
+            ["GeometryQualityPartial"] = "Some contour features were simplified; exact outline is partially preserved.",
+            ["GeometryQualityBoundsOnly"] = "Closed contour was not found; bounding-box geometry is used.",
+            ["GeometryQualityInvalid"] = "No usable geometry found.",
+            ["GeometrySimplifiedCountFormat"] = "({0} simplified)",
+            ["GeometryDiagnosticUnsupportedEntity"] = "Unsupported DXF entity skipped.",
+            ["GeometryDiagnosticClosedStateUnavailable"] = "Closed state of a polyline could not be read.",
+            ["GeometryDiagnosticBulgeUnavailable"] = "Arc bulge value could not be read.",
+            ["GeometryDiagnosticInvalidClosedLoop"] = "Closed loop has too few points.",
+            ["GeometryDiagnosticNoClosedContour"] = "No closed contour found; using bounding box.",
+            ["GeometryDiagnosticNoUsableBounds"] = "No usable bounds found.",
+            ["MenuEnglish"] = "English",
+            ["MenuUkrainian"] = "Українська",
+            ["MenuThemeLight"] = "Light",
+            ["MenuThemeDark"] = "Dark",
+            ["MaterialsWindowTitle"] = "Materials",
+            ["LabelLibrary"] = "Library",
+            ["LabelInProject"] = "In project (order = sections order)",
+            ["ButtonAdd"] = "Add",
+            ["ButtonDelete"] = "Delete",
+            ["ButtonUp"] = "Up",
+            ["ButtonDown"] = "Down",
+            ["ColumnName"] = "Name",
+            ["ColumnLength"] = "Length",
+            ["ColumnWidth"] = "Width",
+            ["ColumnThickness"] = "Thickness",
+            ["ColumnHasGrain"] = "Has grain",
+            ["ColumnCopy"] = "Copy",
+            ["ColumnRotation"] = "Rotation",
+            ["ColumnX"] = "X",
+            ["ColumnY"] = "Y",
+            ["ColumnW"] = "W",
+            ["ColumnH"] = "H"
         };
 
         _resources["ua"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -291,6 +356,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ButtonDeleteRow"] = "Видалити рядок",
             ["ButtonCopyMaterial"] = "Копіювати",
             ["TooltipCopyMaterial"] = "Копіювати вибраний матеріал",
+            ["TooltipResolveDxf"] = "Натисніть, щоб вибрати або уточнити файл DXF",
             ["ButtonSelectFileManually"] = "Вибір файлу вручну",
             ["ButtonOpenDxfFolder"] = "Відкрити DXF",
             ["ButtonOpenReport"] = "Відкрити звіт",
@@ -302,7 +368,11 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["ContextMenuDeleteRow"] = "Видалити рядок",
             ["TooltipActiveMaterial"] = "Клікніть, щоб зробити цей матеріал активним для вставки",
             ["SectionSourceDestination"] = "Джерело / призначення",
-            ["SectionDetails"] = "Деталі",
+            ["SectionMaterials"] = "Матеріали",
+            ["TooltipAddMaterial"] = "Додати матеріал з бібліотеки",
+            ["TooltipRemoveMaterial"] = "Видалити матеріал та його деталі",
+            ["ConfirmDeleteMaterialTitle"] = "Видалення матеріалу",
+            ["ConfirmDeleteMaterialMessage"] = "Видалити матеріал '{0}' та всі його деталі?",
             ["ErrorTitleNesting"] = "Помилка розкрою",
             ["ErrorTitleExport"] = "Помилка експорту",
             ["ErrorTitleSave"] = "Помилка збереження",
@@ -320,7 +390,39 @@ public sealed class LocalizationService : INotifyPropertyChanged
             ["SheetPreviewTabFormat"] = "Лист {0}",
             ["SheetPreviewFormat"] = "{0}  {1}x{2} мм  заповнюваність {3:F1}%",
             ["StatusOversizedFormat"] = "Перевищує розмір: деталь {0:F1} × {1:F1} мм не вміщується в робочу зону листа {2:F1} × {3:F1} мм.",
-            ["StatusOversizedGrainBlockedFormat"] = "Перевищує розмір: деталь {0:F1} × {1:F1} мм не вміщується в робочу зону листа {2:F1} × {3:F1} мм (поворот заблокований текстурою)."
+            ["StatusOversizedGrainBlockedFormat"] = "Перевищує розмір: деталь {0:F1} × {1:F1} мм не вміщується в робочу зону листа {2:F1} × {3:F1} мм (поворот заблокований текстурою).",
+            ["GeometryQualityPartial"] = "Частину контурів спрощено; точний контур збережено частково.",
+            ["GeometryQualityBoundsOnly"] = "Замкнений контур не знайдено; використовується геометрія габаритного прямокутника.",
+            ["GeometryQualityInvalid"] = "Придатної геометрії не знайдено.",
+            ["GeometrySimplifiedCountFormat"] = "({0} спрощено)",
+            ["GeometryDiagnosticUnsupportedEntity"] = "Пропущено непідтримуваний об'єкт DXF.",
+            ["GeometryDiagnosticClosedStateUnavailable"] = "Не вдалося прочитати стан замкненості полілінії.",
+            ["GeometryDiagnosticBulgeUnavailable"] = "Не вдалося прочитати значення випуклості дуги.",
+            ["GeometryDiagnosticInvalidClosedLoop"] = "Замкнений контур має замало точок.",
+            ["GeometryDiagnosticNoClosedContour"] = "Замкнений контур не знайдено; використовується габарит.",
+            ["GeometryDiagnosticNoUsableBounds"] = "Придатних габаритів не знайдено.",
+            ["MenuEnglish"] = "English",
+            ["MenuUkrainian"] = "Українська",
+            ["MenuThemeLight"] = "Світла",
+            ["MenuThemeDark"] = "Темна",
+            ["MaterialsWindowTitle"] = "Матеріали",
+            ["LabelLibrary"] = "Бібліотека",
+            ["LabelInProject"] = "У проекті (порядок = порядок розділів)",
+            ["ButtonAdd"] = "Додати",
+            ["ButtonDelete"] = "Видалити",
+            ["ButtonUp"] = "Вгору",
+            ["ButtonDown"] = "Вниз",
+            ["ColumnName"] = "Назва",
+            ["ColumnLength"] = "Довжина",
+            ["ColumnWidth"] = "Ширина",
+            ["ColumnThickness"] = "Товщина",
+            ["ColumnHasGrain"] = "Є текстура",
+            ["ColumnCopy"] = "Копія",
+            ["ColumnRotation"] = "Поворот",
+            ["ColumnX"] = "X",
+            ["ColumnY"] = "Y",
+            ["ColumnW"] = "W",
+            ["ColumnH"] = "H"
         };
     }
 }

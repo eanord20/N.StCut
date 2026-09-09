@@ -2,28 +2,129 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:NStCut.Core.Models;assembly=NStCut.Core"
-        Title="Materials" Height="500" Width="700">
+        xmlns:loc="clr-namespace:NStCut.App.Services"
+        Title="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MaterialsWindowTitle}" Height="850" Width="1250"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}">
+    <Window.Resources>
+        <Style x:Key="DraggableRowStyle" TargetType="DataGridRow">
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="MaterialRow_PreviewMouseLeftButtonDown" />
+            <EventSetter Event="MouseMove" Handler="MaterialRow_MouseMove" />
+            <EventSetter Event="MouseDoubleClick" Handler="MaterialRow_MouseDoubleClick" />
+        </Style>
+        <!-- Implicit-стили (без x:Key) — DataGridColumnHeader/DataGridCell по умолчанию задают Foreground
+             через SystemColors, не наследуя TextElement.Foreground окна; без этого заголовки/ячейки обеих
+             таблиц оставались бы нечитаемыми в тёмной теме (тот же фикс, что и для главной таблицы). -->
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource MaterialDesignCardBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="4,4" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+    </Window.Resources>
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="8" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <DataGrid Grid.Row="0" ItemsSource="{Binding Materials}" SelectedItem="{Binding SelectedMaterial}" AutoGenerateColumns="False" CanUserAddRows="False">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
-                <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="100" />
-                <DataGridTextColumn Header="Width" Binding="{Binding Width}" Width="100" />
-                <DataGridTextColumn Header="Thickness" Binding="{Binding Thickness}" Width="100" />
-                <DataGridCheckBoxColumn Header="Has grain" Binding="{Binding HasGrain}" />
-                <DataGridComboBoxColumn Header="Grain" SelectedItemBinding="{Binding GrainDirection}" ItemsSource="{x:Static local:GrainDirectionValues.Values}" />
-            </DataGrid.Columns>
-        </DataGrid>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Add" Command="{Binding AddCommand}" Margin="0,0,8,0" />
-            <Button Content="Delete" Command="{Binding DeleteCommand}" Margin="0,0,8,0" />
-            <Button Content="OK" Command="{Binding OkCommand}" IsDefault="True" Margin="0,0,8,0" Click="Ok_Click" />
-            <Button Content="Cancel" IsCancel="True" Click="Cancel_Click" />
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Библиотека материалов -->
+        <Grid Grid.Row="0" Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelLibrary}" FontWeight="Bold" />
+            <DataGrid Grid.Row="2" x:Name="LibraryGrid"
+                      ItemsSource="{Binding LibraryMaterials}" SelectedItem="{Binding SelectedLibraryMaterial}"
+                      AutoGenerateColumns="False" CanUserAddRows="False"
+                      BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1"
+                      GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="{DynamicResource MaterialDesignDivider}"
+                      VerticalGridLinesBrush="{DynamicResource MaterialDesignDivider}"
+                      RowStyle="{StaticResource DraggableRowStyle}"
+                      AllowDrop="True" Drop="LibraryGrid_Drop">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnName}" Binding="{Binding Name}" Width="140" />
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnLength}" Binding="{Binding Length}" Width="70" />
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnWidth}" Binding="{Binding Width}" Width="70" />
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnThickness}" Binding="{Binding Thickness}" Width="70" />
+                    <!-- DataGridCheckBoxColumn заменён на DataGridTemplateColumn с явным CheckBox —
+                         штатная колонка-чекбокс в режиме отображения (до входа в редактирование)
+                         показывает почти невидимый "выключенный" чекбокс (известная особенность
+                         WPF DataGrid + MaterialDesign), см. тот же фикс в MainWindow.xaml. -->
+                    <DataGridTemplateColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnHasGrain}" Width="80">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox Style="{StaticResource AppCheckBoxStyle}" IsChecked="{Binding HasGrain, UpdateSourceTrigger=PropertyChanged}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridComboBoxColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnGrain}" SelectedItemBinding="{Binding GrainDirection}" ItemsSource="{x:Static local:GrainDirectionValues.Values}" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonAdd}" Command="{Binding AddToLibraryCommand}" />
+                <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonDelete}" Command="{Binding DeleteFromLibraryCommand}" />
+                <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonCopyMaterial}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=TooltipCopyMaterial}" Command="{Binding CopyCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Кнопки переноса -->
+        <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+            <Button Style="{StaticResource AppButtonStyle}" Content=">" Width="36" Margin="0,0,0,8" Command="{Binding MoveToProjectCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonAddToProject}" />
+            <Button Style="{StaticResource AppButtonStyle}" Content="&lt;" Width="36" Margin="0" Command="{Binding MoveToLibraryCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonRemoveFromProject}" />
+        </StackPanel>
+
+        <!-- Материалы проекта -->
+        <Grid Grid.Row="0" Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelInProject}" FontWeight="Bold" />
+            <DataGrid Grid.Row="2" x:Name="ProjectGrid"
+                      ItemsSource="{Binding ProjectMaterials}" SelectedItem="{Binding SelectedProjectMaterial}"
+                      AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                      BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1"
+                      GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="{DynamicResource MaterialDesignDivider}"
+                      VerticalGridLinesBrush="{DynamicResource MaterialDesignDivider}"
+                      RowStyle="{StaticResource DraggableRowStyle}"
+                      AllowDrop="True" Drop="ProjectGrid_Drop">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnName}" Binding="{Binding Name}" Width="140" />
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnLength}" Binding="{Binding Length}" Width="70" />
+                    <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnWidth}" Binding="{Binding Width}" Width="70" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonUp}" Command="{Binding MoveProjectUpCommand}" />
+                <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonDown}" Command="{Binding MoveProjectDownCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonOk}" Command="{Binding OkCommand}" IsDefault="True" Click="Ok_Click" />
+            <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonCancel}" Command="{Binding CancelCommand}" IsCancel="True" Margin="0" Click="Cancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

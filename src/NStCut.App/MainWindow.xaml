@@ -97,10 +97,6 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -125,42 +121,6 @@
                                     </ToolTip>
                                 </TextBlock.ToolTip>
                             </TextBlock>
-                            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelMaxSearchPasses}" />
-                            <TextBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,0" Text="{Binding MaxSearchPasses, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintMaxSearchPasses}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                            <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelNoImprovementStopCount}" />
-                            <TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,0" Text="{Binding NoImprovementStopCount, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintNoImprovementStopCount}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                            <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxUnplaced}" />
-                            <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxUnplaced, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="4" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintAcceptableMaxUnplaced}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                            <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelAcceptableMaxSheets}" />
-                            <TextBox Grid.Row="5" Grid.Column="1" Margin="0,2,0,0" Text="{Binding AcceptableMaxSheets, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="5" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintAcceptableMaxSheets}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
                         </Grid>
                     </MenuItem.Header>
                 </MenuItem>
@@ -171,12 +131,12 @@
                           StaysOpenOnClick="True" />
             </MenuItem>
             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuLanguage}">
-                <MenuItem Header="English" Command="{Binding SetLanguageCommand}" CommandParameter="en" />
-                <MenuItem Header="Українська" Command="{Binding SetLanguageCommand}" CommandParameter="ua" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuEnglish}" Command="{Binding SetLanguageCommand}" CommandParameter="en" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuUkrainian}" Command="{Binding SetLanguageCommand}" CommandParameter="ua" />
             </MenuItem>
             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuTheme}">
-                <MenuItem Header="Light" Command="{Binding SetThemeCommand}" CommandParameter="Light" />
-                <MenuItem Header="Dark" Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuThemeLight}" Command="{Binding SetThemeCommand}" CommandParameter="Light" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuThemeDark}" Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
             </MenuItem>
         </Menu>
 
@@ -335,21 +295,50 @@
                 </Grid.RowDefinitions>
 
                 <!-- Заголовок секции — визуальное зонирование окна (docs/UX_Audit.md, "Список изменений → Important"). -->
-                <TextBlock Grid.Row="0" FontWeight="SemiBold" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SectionDetails}" />
+                <TextBlock Grid.Row="0" FontWeight="SemiBold" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SectionMaterials}" />
 
                 <!-- Чипы материалов проекта — клик делает материал "активным" для следующей вставки -->
-                <ItemsControl Grid.Row="2" ItemsSource="{Binding Materials}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding Name}" Style="{StaticResource MaterialChipStyle}" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                    <ItemsControl ItemsSource="{Binding Materials}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource MaterialChipStyle}" Padding="8,3" Width="Auto" Height="Auto">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                        <Button ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=TooltipRemoveMaterial}"
+                                                Command="{Binding DataContext.DeleteMaterialCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding Id}"
+                                                Padding="0" Width="18" Height="18" Background="Transparent" BorderThickness="0"
+                                                VerticalAlignment="Center">
+                                            <materialDesign:PackIcon Kind="Close" Width="12" Height="12" />
+                                        </Button>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <materialDesign:PopupBox ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=TooltipAddMaterial}" Margin="0,0,6,0" StaysOpen="False">
+                        <materialDesign:PopupBox.ToggleContent>
+                            <materialDesign:PackIcon Kind="Plus" Width="16" Height="16" />
+                        </materialDesign:PopupBox.ToggleContent>
+                        <ItemsControl ItemsSource="{Binding AvailableLibraryMaterials}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Name}" Style="{StaticResource AppButtonStyle}"
+                                            Width="Auto" Height="Auto" Padding="6,2" HorizontalContentAlignment="Left"
+                                            Command="{Binding DataContext.AddMaterialCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </materialDesign:PopupBox>
+                </StackPanel>
 
                 <ToolBarTray Grid.Row="4" Margin="0,0,0,6">
                     <ToolBar>
@@ -503,11 +492,21 @@
                         <DataGridTemplateColumn x:Name="ColStatus" Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnStatus}" Width="100">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Content="{Binding Status}" HorizontalContentAlignment="Left"
-                                            Background="Transparent" BorderThickness="0" Padding="4,0"
-                                            Command="{Binding DataContext.ResolveStatusCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            CommandParameter="{Binding}"
-                                            ToolTip="Click to select/resolve DXF file" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="{Binding Status}" HorizontalContentAlignment="Left"
+                                                Background="{DynamicResource AppTransparentBackgroundBrush}" BorderThickness="0" Padding="4,0"
+                                                Command="{Binding DataContext.ResolveStatusCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=TooltipResolveDxf}" />
+                                        <materialDesign:PackIcon Kind="AlertOutline" Margin="2,0" VerticalAlignment="Center"
+                                                                 Foreground="{DynamicResource GeometryWarningBrush}"
+                                                                 ToolTip="{Binding GeometryDiagnosticText}"
+                                                                 Visibility="{Binding HasGeometryWarning, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        <materialDesign:PackIcon Kind="AlertCircleOutline" Margin="2,0" VerticalAlignment="Center"
+                                                                 Foreground="{DynamicResource GeometryErrorBrush}"
+                                                                 ToolTip="{Binding GeometryDiagnosticText}"
+                                                                 Visibility="{Binding HasGeometryError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>

@@ -4,6 +4,7 @@
         xmlns:loc="clr-namespace:NStCut.App.Services"
         xmlns:converters="clr-namespace:NStCut.App.Converters"
         xmlns:coreConstants="clr-namespace:NStCut.Core.Constants;assembly=NStCut.Core"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=SheetPreviewTitle}" Height="600" Width="900"
         WindowStartupLocation="CenterOwner"
         WindowState="Normal"
@@ -18,14 +19,35 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <ToolBarTray Grid.Row="0" IsHitTestVisible="True">
-            <ToolBar>
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Command="{Binding RenestCurrentSheetCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonRenestCurrentSheet}">
+                <materialDesign:PackIcon Kind="Play" Width="24" Height="24" />
+            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8,0">
+                <Button Command="{Binding ExportDxfCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonExportDxf}" Margin="0,0,4,0">
+                    <materialDesign:PackIcon Kind="FileExport" Width="24" Height="24" />
+                </Button>
+                <Button Command="{Binding ExportReportCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonExportReport}" Margin="0,0,4,0">
+                    <materialDesign:PackIcon Kind="FilePdfBox" Width="24" Height="24" />
+                </Button>
+                <Button Command="{Binding OpenDxfCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonOpenDxfFolder}" Margin="0,0,4,0">
+                    <materialDesign:PackIcon Kind="FolderOpenOutline" Width="24" Height="24" />
+                </Button>
+                <Button Command="{Binding OpenReportCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonOpenReport}">
+                    <materialDesign:PackIcon Kind="FileEyeOutline" Width="24" Height="24" />
+                </Button>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelZoom}" />
-                <Slider Value="{Binding Zoom, Mode=TwoWay}" Minimum="0.1" Maximum="2.0" TickFrequency="0.1" Width="120" VerticalAlignment="Center" Margin="6,0" />
+                <Slider Value="{Binding Zoom, Mode=TwoWay}" Minimum="0.1" Maximum="2.0" TickFrequency="0.1" MinWidth="120" Width="Auto" VerticalAlignment="Center" Margin="6,0" />
                 <TextBlock VerticalAlignment="Center" Text="{Binding Zoom, StringFormat='{}{0:P0}'}" />
-                <Button Command="{Binding RenestCurrentSheetCommand}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonRenestCurrentSheet}" Margin="8,0,0,0" />
-            </ToolBar>
-        </ToolBarTray>
+            </StackPanel>
+        </Grid>
         <TabControl Grid.Row="1" ItemsSource="{Binding Sheets}" SelectedItem="{Binding SelectedSheet, Mode=TwoWay}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}">
             <TabControl.ItemTemplate>
                 <DataTemplate>
@@ -45,6 +67,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Margin="0,0,0,8">
                             <TextBlock.Text>
@@ -76,7 +99,21 @@
                                     </ItemsControl.ItemContainerStyle>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Rectangle Width="{Binding Width}" Height="{Binding Height}" Stroke="{DynamicResource SheetPreviewPartStrokeBrush}" Fill="{DynamicResource SheetPreviewPartFillBrush}" StrokeThickness="0.5" />
+                                            <Canvas Width="{Binding Width}" Height="{Binding Height}">
+                                                <Rectangle Width="{Binding Width}" Height="{Binding Height}" Stroke="{DynamicResource SheetPreviewPartStrokeBrush}" Fill="{DynamicResource SheetPreviewPartFillBrush}" StrokeThickness="0.5" Cursor="Hand" MouseLeftButtonDown="OnPartMouseLeftButtonDown" MouseMove="OnPartMouseMove" MouseLeftButtonUp="OnPartMouseLeftButtonUp" MouseRightButtonDown="OnPartMouseRightButtonDown" />
+                                                <Path Data="{Binding ContourGeometry}" Stroke="{DynamicResource SheetPreviewPartStrokeBrush}" StrokeThickness="0.2" Fill="Transparent" IsHitTestVisible="False">
+                                                    <Path.Style>
+                                                        <Style TargetType="Path">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasContour}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Path.Style>
+                                                </Path>
+                                            </Canvas>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -97,6 +134,17 @@
                                 </Canvas>
                             </Grid>
                         </ScrollViewer>
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding Parts}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,4,0,0" MaxHeight="200">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnNumber}" Binding="{Binding Source.Source.Number}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnCopy}" Binding="{Binding Source.CopyIndex}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnRotation}" Binding="{Binding Source.Rotation, StringFormat='{}{0:F1}'}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnX}" Binding="{Binding Source.Position.X, StringFormat='{}{0:F1}'}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnY}" Binding="{Binding Source.Position.Y, StringFormat='{}{0:F1}'}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnW}" Binding="{Binding Source.Bounds.Width, StringFormat='{}{0:F1}'}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnH}" Binding="{Binding Source.Bounds.Height, StringFormat='{}{0:F1}'}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </Grid>
                 </DataTemplate>
             </TabControl.ContentTemplate>
