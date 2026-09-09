@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Threading;
 using NStCut.Core.Constants;
 using NStCut.Core.Contracts;
 using NStCut.Core.Models;
@@ -23,8 +24,10 @@ public sealed class ReportService : IReportService
         IReadOnlyList<SheetMaterial> materials,
         IReadOnlyList<SheetInstance> sheets,
         IReadOnlyList<byte[]> sheetThumbnails,
-        ReportLabels? labels = null)
+        ReportLabels? labels = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
         using var doc = DocX.Create(outputPath);

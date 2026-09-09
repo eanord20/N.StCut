@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
@@ -53,6 +54,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _isBusy;
     private PartRow? _selectedRow;
     private readonly INestingResultManager _nestingResultManager;
+    private CancellationTokenSource? _currentCts;
     private string? _activePasteMaterialId;
     private double _sheetMarginMm = DefaultNestingOptions.Value.SheetMarginMm;
     private double _partGapMm = DefaultNestingOptions.Value.PartGapMm;
@@ -153,6 +155,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ExportReportCommand = new RelayCommand(_ => ExportReport(), _ => _nestingResultManager.HasResult && !IsBusy);
         OpenOutputFolderCommand = new RelayCommand(_ => OpenOutputFolder(), _ => Directory.Exists(OutputPath));
         OpenReportCommand = new RelayCommand(_ => OpenReport(), _ => _nestingResultManager.HasLastReportPath);
+        CancelCommand = new RelayCommand(_ => Cancel(), _ => IsBusy);
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoStack.Count > 0);
         SaveProjectCommand = new RelayCommand(_ => SaveProject(), _ => Rows.Count > 0);
         OpenProjectCommand = new RelayCommand(_ => OpenProject());
@@ -440,6 +443,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ExportReportCommand { get; }
     public ICommand OpenOutputFolderCommand { get; }
     public ICommand OpenReportCommand { get; }
+    public ICommand CancelCommand { get; }
     public ICommand UndoCommand { get; }
     public ICommand SaveProjectCommand { get; }
     public ICommand OpenProjectCommand { get; }
@@ -1165,7 +1169,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         NestingOptions options,
         IReadOnlyDictionary<string, SheetMaterial> materialDict,
         IReadOnlyList<NestingInput> inputs,
-        IProgress<double>? progress)
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
     {
         var validParts = new List<Part>();
         var invalidParts = new List<Part>();
@@ -1240,7 +1245,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Select(id => materialDict[id])
             .ToList();
 
-        var result = _nestingEngine.Nest(validParts, materials, options, progress);
+        var result = _nestingEngine.Nest(validParts, materials, options, progress, cancellationToken);
         result.Unplaced.AddRange(invalidParts);
         result.Unplaced.AddRange(oversizedParts);
         return new NestingWorkResult(result, updates);
@@ -1278,6 +1283,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     internal async Task<NestingResult> NestAsync(IProgress<double>? progress = null)
     {
+        using var cts = new CancellationTokenSource();
+        _currentCts = cts;
         IsBusy = true;
         try
         {
@@ -1290,7 +1297,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             RecomputeOversizedForAll();
 
-            var work = await Task.Run(() => PerformNesting(options, materialDict, inputs, progress));
+            var work = await Task.Run(() => PerformNesting(options, materialDict, inputs, progress, cts.Token), cts.Token);
 
             foreach (var update in work.Updates)
             {
@@ -1324,6 +1331,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
+            _currentCts = null;
             IsBusy = false;
         }
     }
@@ -1347,6 +1355,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             };
             preview.Show();
         }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Cancelled";
+        }
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, _localization.ErrorTitleNesting, MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1363,6 +1375,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var sheetMarginMm = SheetMarginMm;
         var exportCombined = ExportCombinedDxf;
         var sheets = _nestingResultManager.Current.Sheets.ToList();
+        using var cts = new CancellationTokenSource();
+        _currentCts = cts;
         IsBusy = true;
         var exportedCount = 0;
         string? combinedPath = null;
@@ -1377,20 +1391,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 if (exportCombined)
                 {
                     combinedPath = _exportFileNameService.GetCombinedDxfExportPath(outputPath);
-                    _dxfExport.WriteCombined(combinedPath, sheets, partGapMm, sheetMarginMm, labels);
+                    _dxfExport.WriteCombined(combinedPath, sheets, partGapMm, sheetMarginMm, labels, cts.Token);
                 }
                 else
                 {
                     var batchTimestamp = _exportFileNameService.GetBatchTimestamp();
                     var exports = sheets.Select(sheet =>
                         (_exportFileNameService.GetDxfExportPath(outputPath, sheet, batchTimestamp), sheet)).ToList();
-                    _dxfExport.WriteSheets(exports, partGapMm, sheetMarginMm, labels);
+                    _dxfExport.WriteSheets(exports, partGapMm, sheetMarginMm, labels, cts.Token);
                     exportedCount = exports.Count;
                 }
-            });
+            }, cts.Token);
             StatusText = exportCombined
                 ? $"DXF exported to {combinedPath}"
                 : $"DXF exported to {outputPath}";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Cancelled";
         }
         catch (Exception ex)
         {
@@ -1404,6 +1422,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
+            _currentCts = null;
             IsBusy = false;
         }
     }
@@ -1411,6 +1430,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private async void ExportReport()
     {
         if (_nestingResultManager.Current == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        using var cts = new CancellationTokenSource();
+        _currentCts = cts;
         IsBusy = true;
         try
         {
@@ -1428,9 +1449,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _localization.GrainHorizontal,
                 _localization.GrainVertical);
             await Task.Run(() =>
-                _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels));
+                _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels, cts.Token), cts.Token);
             _nestingResultManager.SetLastReportPath(path);
             StatusText = $"Report saved: {path}";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Cancelled";
         }
         catch (Exception ex)
         {
@@ -1438,6 +1463,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
+            _currentCts = null;
             IsBusy = false;
         }
     }
@@ -1452,6 +1478,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (!_nestingResultManager.HasLastReportPath) return;
         Process.Start(new ProcessStartInfo(_nestingResultManager.LastReportPath!) { UseShellExecute = true });
+    }
+
+    private void Cancel()
+    {
+        _currentCts?.Cancel();
+        StatusText = "Cancelling...";
     }
 
     private void SaveProject()

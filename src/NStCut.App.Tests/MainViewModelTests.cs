@@ -986,7 +986,8 @@ public class MainViewModelTests
                 new NestingOptions(),
                 new Dictionary<string, SheetMaterial>(),
                 new[] { new MainViewModel.NestingInput(7, part) },
-                null);
+                null,
+                default);
 
             var update = Assert.Single(work.Updates);
             Assert.Equal(7, update.RowIndex);
@@ -1126,7 +1127,8 @@ public class MainViewModelTests
                 new NestingOptions(),
                 new Dictionary<string, SheetMaterial>(),
                 new[] { new MainViewModel.NestingInput(0, part) },
-                null);
+                null,
+                default);
 
             var update = Assert.Single(work.Updates);
             Assert.Equal(0, update.RowIndex);
@@ -1262,7 +1264,8 @@ public class MainViewModelTests
             new NestingOptions(),
             new Dictionary<string, SheetMaterial>(),
             new[] { new MainViewModel.NestingInput(0, part) },
-            null);
+            null,
+            default);
 
         Assert.Empty(work.Result.Unplaced);
         Assert.Single(work.Updates);
@@ -1800,21 +1803,21 @@ internal sealed class FakeDxfExportService : IDxfExportService
     public IReadOnlyList<SheetInstance>? LastCombinedSheets { get; private set; }
     public DxfExportLabels? LastCombinedLabels { get; private set; }
 
-    public void WriteSheet(string outputPath, SheetInstance sheet, double partGapMm, double sheetMarginMm, DxfExportLabels? labels = null)
+    public void WriteSheet(string outputPath, SheetInstance sheet, double partGapMm, double sheetMarginMm, DxfExportLabels? labels = null, CancellationToken cancellationToken = default)
     {
         EntryCount++;
         Gate.Wait();
         WrittenPaths.Add(outputPath);
     }
 
-    public void WriteSheets(IReadOnlyList<(string OutputPath, SheetInstance Sheet)> sheets, double partGapMm, double sheetMarginMm, DxfExportLabels? labels = null)
+    public void WriteSheets(IReadOnlyList<(string OutputPath, SheetInstance Sheet)> sheets, double partGapMm, double sheetMarginMm, DxfExportLabels? labels = null, CancellationToken cancellationToken = default)
     {
         WriteSheetsCallCount++;
         foreach (var item in sheets)
-            WriteSheet(item.OutputPath, item.Sheet, partGapMm, sheetMarginMm, labels);
+            WriteSheet(item.OutputPath, item.Sheet, partGapMm, sheetMarginMm, labels, cancellationToken);
     }
 
-    public void WriteCombined(string outputPath, IReadOnlyList<SheetInstance> sheets, double partGapMm, double sheetMarginMm, DxfExportLabels labels)
+    public void WriteCombined(string outputPath, IReadOnlyList<SheetInstance> sheets, double partGapMm, double sheetMarginMm, DxfExportLabels labels, CancellationToken cancellationToken = default)
     {
         EntryCount++;
         LastCombinedPath = outputPath;
@@ -1831,7 +1834,7 @@ internal sealed class FakeReportService : IReportService
 
     public void GenerateReport(string outputPath, string projectName, IReadOnlyList<Part> parts,
         IReadOnlyList<SheetMaterial> materials, IReadOnlyList<SheetInstance> sheets, IReadOnlyList<byte[]> sheetThumbnails,
-        ReportLabels? labels = null)
+        ReportLabels? labels = null, CancellationToken cancellationToken = default)
     {
         LastOutputPath = outputPath;
         LastLabels = labels;
