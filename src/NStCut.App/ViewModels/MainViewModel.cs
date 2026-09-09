@@ -1142,6 +1142,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     internal sealed record RowNestingUpdate(
         int RowIndex,
         NStCut.Core.Geometry.Rect Bounds,
+        double Area,
+        double Perimeter,
         PartStatus Status,
         DxfGeometryQuality GeometryQuality,
         IReadOnlyList<DxfGeometryDiagnosticCode> GeometryDiagnostics);
@@ -1174,6 +1176,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 part.Contour = contour.Polygon;
                 part.Holes = contour.Holes;
                 part.Area = contour.TrueArea;
+                part.Perimeter = contour.TruePerimeter;
 
                 if (contour.Quality == DxfGeometryQuality.Invalid || !contour.HasUsableBounds)
                 {
@@ -1189,6 +1192,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                         updates.Add(new RowNestingUpdate(
                             input.RowIndex,
                             contour.Bounds,
+                            part.Area,
+                            part.Perimeter,
                             part.Status,
                             contour.Quality,
                             contour.Diagnostics.Select(d => d.Code).ToList()));
@@ -1205,6 +1210,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 updates.Add(new RowNestingUpdate(
                     input.RowIndex,
                     contour.Bounds,
+                    part.Area,
+                    part.Perimeter,
                     part.Status,
                     contour.Quality,
                     contour.Diagnostics.Select(d => d.Code).ToList()));
@@ -1239,6 +1246,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         updates.Add(new RowNestingUpdate(
             input.RowIndex,
             default,
+            0.0,
+            0.0,
             status,
             DxfGeometryQuality.Invalid,
             diagnostics));
@@ -1248,6 +1257,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             copy.Quantity = 1;
             copy.Bounds = default;
             copy.Area = 0;
+            copy.Perimeter = 0;
             copy.Contour = null;
             copy.Status = status;
             invalidParts.Add(copy);
@@ -1274,6 +1284,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 var row = rowReferences[update.RowIndex];
                 row.Bounds = update.Bounds;
+                row.Area = update.Area;
+                row.Perimeter = update.Perimeter;
                 row.Status = update.Status;
                 row.GeometryQuality = update.GeometryQuality;
                 row.GeometryDiagnostics = update.GeometryDiagnostics;
