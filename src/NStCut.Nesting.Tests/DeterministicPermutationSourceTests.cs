@@ -66,4 +66,25 @@ public class DeterministicPermutationSourceTests
         Assert.Single(permuted);
         Assert.Equal("A", permuted[0].Number);
     }
+
+    [Fact]
+    public void Permute_MultiplePassesYieldMultipleDistinctOrders()
+    {
+        var source = new[]
+        {
+            new Part { Number = "A" },
+            new Part { Number = "B" },
+            new Part { Number = "C" },
+            new Part { Number = "D" },
+            new Part { Number = "E" }
+        };
+
+        var distinct = Enumerable.Range(0, 10)
+            .Select(pass => DeterministicPermutationSource.Permute(source, 999L, pass))
+            .Select(p => string.Concat(p.Select(x => x.Number)))
+            .Distinct()
+            .ToList();
+
+        Assert.True(distinct.Count > 5, $"Expected more than 5 distinct permutations, got {distinct.Count}");
+    }
 }

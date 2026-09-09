@@ -15,11 +15,7 @@ internal static class DeterministicPermutationSource
 
         var result = new List<Part>(source);
 
-        var seedRng = new DeterministicRandom(baseSeed);
-        for (var i = 0; i <= pass; i++)
-            seedRng.Next(int.MaxValue);
-
-        var rng = new DeterministicRandom(seedRng.Next(int.MaxValue));
+        var rng = new DeterministicRandom(baseSeed + (long)pass * 1_000_003L);
 
         for (var i = result.Count - 1; i > 0; i--)
         {
