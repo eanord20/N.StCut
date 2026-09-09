@@ -25,7 +25,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NStCut.Core\NStCut.Core.csproj" />
+    <ProjectReference Include="..\NStCut.Dxf\NStCut.Dxf.csproj" />
     <ProjectReference Include="..\NStCut.Nesting\NStCut.Nesting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\NStCut.Dxf.Tests\Corpus\*.dxf" Link="Corpus\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
