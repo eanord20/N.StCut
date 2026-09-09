@@ -670,10 +670,13 @@ public class MainViewModelTests
         Assert.True(vm.ExportReportCommand.CanExecute(null));
     }
 
+    private static INestingResultManager GetNestingResultManager(MainViewModel vm)
+        => (INestingResultManager)typeof(MainViewModel)
+            .GetField("_nestingResultManager", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(vm)!;
+
     private static NestingResult? GetNestingResult(MainViewModel vm)
-        => (NestingResult?)typeof(MainViewModel)
-            .GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(vm);
+        => GetNestingResultManager(vm).Current;
 
     private static void SetNestingResult(MainViewModel vm)
     {
@@ -683,7 +686,7 @@ public class MainViewModelTests
             Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 },
             Index = 1
         });
-        typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(vm, result);
+        GetNestingResultManager(vm).Set(result);
     }
 
     [Fact]
@@ -703,8 +706,7 @@ public class MainViewModelTests
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Alum", Length = 1500, Width = 750 }, Index = 2 });
 
-            var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            field!.SetValue(vm, result);
+            GetNestingResultManager(vm).Set(result);
 
             vm.ExportDxfCommand.Execute(null);
 
@@ -740,8 +742,7 @@ public class MainViewModelTests
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Alum", Length = 1500, Width = 750 }, Index = 2 });
 
-            var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            field!.SetValue(vm, result);
+            GetNestingResultManager(vm).Set(result);
 
             Assert.True(vm.ExportDxfCommand.CanExecute(null));
 
@@ -783,8 +784,7 @@ public class MainViewModelTests
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Alum", Length = 1500, Width = 750 }, Index = 2 });
 
-            var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            field!.SetValue(vm, result);
+            GetNestingResultManager(vm).Set(result);
 
             vm.ExportCombinedDxf = true;
             vm.ExportDxfCommand.Execute(null);
@@ -817,8 +817,7 @@ public class MainViewModelTests
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Alum", Length = 1500, Width = 750 }, Index = 2 });
 
-            var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            field!.SetValue(vm, result);
+            GetNestingResultManager(vm).Set(result);
 
             vm.ExportCombinedDxf = false;
             vm.ExportDxfCommand.Execute(null);
@@ -841,8 +840,7 @@ public class MainViewModelTests
         var result = new NestingResult();
         result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
 
-        var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-        field!.SetValue(vm, result);
+        GetNestingResultManager(vm).Set(result);
 
         Assert.True(vm.ExportReportCommand.CanExecute(null));
 
@@ -873,19 +871,17 @@ public class MainViewModelTests
             var result = new NestingResult();
             result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 2000, Width = 1000 }, Index = 1 });
 
-            var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            field!.SetValue(vm, result);
-
-            var lastReportPathField = typeof(MainViewModel).GetField("_lastReportPath", BindingFlags.NonPublic | BindingFlags.Instance);
+            var manager = GetNestingResultManager(vm);
+            manager.Set(result);
 
             vm.ExportReportCommand.Execute(null);
 
-            var completed = SpinWait.SpinUntil(() => lastReportPathField!.GetValue(vm) is not null, TimeSpan.FromSeconds(5));
+            var completed = SpinWait.SpinUntil(() => manager.LastReportPath is not null, TimeSpan.FromSeconds(5));
             Assert.True(completed, "Expected report generation to complete");
 
             Assert.NotNull(fakeReport.LastOutputPath);
             Assert.Equal(Path.Combine(tempDir, "Report.docx"), fakeReport.LastOutputPath);
-            Assert.Equal(fakeReport.LastOutputPath, lastReportPathField!.GetValue(vm));
+            Assert.Equal(fakeReport.LastOutputPath, manager.LastReportPath);
         }
         finally
         {
@@ -933,8 +929,7 @@ public class MainViewModelTests
                 result.Sheets.Add(firstSheet);
                 result.Sheets.Add(secondSheet);
 
-                var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-                field!.SetValue(vm, result);
+                GetNestingResultManager(vm).Set(result);
 
                 vm.ExportCombinedDxf = true;
                 vm.ExportDxfCommand.Execute(null);
@@ -1647,8 +1642,7 @@ public class MainViewModelTests
                 var result = new NestingResult();
                 result.Sheets.Add(new SheetInstance { Material = new SheetMaterial { Name = "Steel", Length = 100, Width = 100 }, Index = 1 });
 
-                var field = typeof(MainViewModel).GetField("_nestingResult", BindingFlags.NonPublic | BindingFlags.Instance);
-                field!.SetValue(vm, result);
+                GetNestingResultManager(vm).Set(result);
 
                 vm.ExportReportCommand.Execute(null);
 

@@ -52,9 +52,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private double _progressValue;
     private bool _isBusy;
     private PartRow? _selectedRow;
-    private NestingResult? _nestingResult;
+    private readonly INestingResultManager _nestingResultManager;
     private string? _activePasteMaterialId;
-    private string? _lastReportPath;
     private double _sheetMarginMm = DefaultNestingOptions.Value.SheetMarginMm;
     private double _partGapMm = DefaultNestingOptions.Value.PartGapMm;
     private int _maxSearchPasses = DefaultNestingOptions.Value.MaxSearchPasses;
@@ -90,7 +89,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IProjectFileService? projectService = null,
         IAppSettingsService? appSettingsService = null,
         IExportFileNameService? exportFileNameService = null,
-        IMaterialsLibraryService? materialsLibraryService = null)
+        IMaterialsLibraryService? materialsLibraryService = null,
+        INestingResultManager? nestingResultManager = null)
     {
         _nestingEngine = nestingEngine;
         _dxfGeometry = dxfGeometry;
@@ -104,6 +104,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _appSettingsService = appSettingsService ?? new AppSettingsService();
         _exportFileNameService = exportFileNameService ?? new ExportFileNameService();
         _materialsLibraryService = materialsLibraryService ?? new MaterialsLibraryService();
+        _nestingResultManager = nestingResultManager ?? new NestingResultManager();
+        _nestingResultManager.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(INestingResultManager.HasResult))
+            {
+                ((RelayCommand?)ExportDxfCommand)?.RaiseCanExecuteChanged();
+                ((RelayCommand?)ExportReportCommand)?.RaiseCanExecuteChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
+            else if (e.PropertyName == nameof(INestingResultManager.HasLastReportPath))
+            {
+                ((RelayCommand?)OpenReportCommand)?.RaiseCanExecuteChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
+        };
         _sessionLogPath = BuildSessionLogPath();
 
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
@@ -134,10 +149,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ImportExcelFileCommand = new RelayCommand(_ => ImportExcelFile());
         OpenMaterialsCommand = new RelayCommand(_ => OpenMaterialsWindow());
         NestCommand = new RelayCommand(_ => Nest(), _ => CanNest());
-        ExportDxfCommand = new RelayCommand(_ => ExportDxf(), _ => _nestingResult != null && !IsBusy);
-        ExportReportCommand = new RelayCommand(_ => ExportReport(), _ => _nestingResult != null && !IsBusy);
+        ExportDxfCommand = new RelayCommand(_ => ExportDxf(), _ => _nestingResultManager.HasResult && !IsBusy);
+        ExportReportCommand = new RelayCommand(_ => ExportReport(), _ => _nestingResultManager.HasResult && !IsBusy);
         OpenOutputFolderCommand = new RelayCommand(_ => OpenOutputFolder(), _ => Directory.Exists(OutputPath));
-        OpenReportCommand = new RelayCommand(_ => OpenReport(), _ => _lastReportPath != null && File.Exists(_lastReportPath));
+        OpenReportCommand = new RelayCommand(_ => OpenReport(), _ => _nestingResultManager.HasLastReportPath);
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoStack.Count > 0);
         SaveProjectCommand = new RelayCommand(_ => SaveProject(), _ => Rows.Count > 0);
         OpenProjectCommand = new RelayCommand(_ => OpenProject());
@@ -684,11 +699,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void InvalidateNestingResult()
     {
-        if (_nestingResult == null)
+        if (!_nestingResultManager.HasResult)
             return;
 
-        _nestingResult = null;
-        CommandManager.InvalidateRequerySuggested();
+        _nestingResultManager.Clear();
     }
 
     private void RecomputeOversized(PartRow row)
@@ -863,9 +877,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         PushUndoSnapshot();
         Rows.Clear();
         SelectedRow = null;
-        _nestingResult = null;
-        ((RelayCommand)ExportDxfCommand).RaiseCanExecuteChanged();
-        ((RelayCommand)ExportReportCommand).RaiseCanExecuteChanged();
+        _nestingResultManager.Clear();
     }
 
     private void SelectFileManually(PartRow? row)
@@ -1297,8 +1309,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RecomputeOversizedForAll();
             UpdateStatusTextForSelection();
 
-            _nestingResult = work.Result;
-            var existingStatus = $"Sheets: {_nestingResult.Sheets.Count}, unplaced: {_nestingResult.Unplaced.Count}";
+            var result = work.Result;
+            _nestingResultManager.Set(result);
+            var existingStatus = $"Sheets: {result.Sheets.Count}, unplaced: {result.Unplaced.Count}";
             var simplifiedCount = work.Updates
                 .Where(update => update.GeometryQuality is DxfGeometryQuality.Partial or DxfGeometryQuality.BoundsOnly)
                 .Select(update => update.RowIndex)
@@ -1307,9 +1320,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             StatusText = simplifiedCount > 0
                 ? $"{existingStatus} {string.Format(_localization["GeometrySimplifiedCountFormat"], simplifiedCount)}"
                 : existingStatus;
-            ((RelayCommand)ExportDxfCommand).RaiseCanExecuteChanged();
-            ((RelayCommand)ExportReportCommand).RaiseCanExecuteChanged();
-            return work.Result;
+            return result;
         }
         finally
         {
@@ -1346,12 +1357,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     // (docs/Audit_Performance.md, issue P2).
     private async void ExportDxf()
     {
-        if (_nestingResult == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        if (_nestingResultManager.Current == null || string.IsNullOrWhiteSpace(OutputPath)) return;
         var outputPath = OutputPath;
         var partGapMm = PartGapMm;
         var sheetMarginMm = SheetMarginMm;
         var exportCombined = ExportCombinedDxf;
-        var sheets = _nestingResult.Sheets.ToList();
+        var sheets = _nestingResultManager.Current.Sheets.ToList();
         IsBusy = true;
         var exportedCount = 0;
         string? combinedPath = null;
@@ -1399,14 +1410,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async void ExportReport()
     {
-        if (_nestingResult == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        if (_nestingResultManager.Current == null || string.IsNullOrWhiteSpace(OutputPath)) return;
         IsBusy = true;
         try
         {
             Directory.CreateDirectory(OutputPath);
 
             var parts = Rows.Where(r => r.IsEnabled).Select(r => r.ToPart()).ToList();
-            var sheets = _nestingResult.Sheets;
+            var sheets = _nestingResultManager.Current.Sheets;
             var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s)).ToList();
 
             var path = _exportFileNameService.GetReportExportPath(OutputPath);
@@ -1418,8 +1429,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _localization.GrainVertical);
             await Task.Run(() =>
                 _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels));
-            _lastReportPath = path;
-            ((RelayCommand)OpenReportCommand).RaiseCanExecuteChanged();
+            _nestingResultManager.SetLastReportPath(path);
             StatusText = $"Report saved: {path}";
         }
         catch (Exception ex)
@@ -1440,8 +1450,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void OpenReport()
     {
-        if (_lastReportPath == null || !File.Exists(_lastReportPath)) return;
-        Process.Start(new ProcessStartInfo(_lastReportPath) { UseShellExecute = true });
+        if (!_nestingResultManager.HasLastReportPath) return;
+        Process.Start(new ProcessStartInfo(_nestingResultManager.LastReportPath!) { UseShellExecute = true });
     }
 
     private void SaveProject()
