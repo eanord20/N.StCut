@@ -276,3 +276,155 @@
 - `dotnet test src/NStCut.Reports.Tests/NStCut.Reports.Tests.csproj` — 10/10.
 - `dotnet test src/NStCut.Nesting.Tests/NStCut.Nesting.Tests.csproj` — 76/76.
 - `dotnet test src/NStCut.IntegrationTests/NStCut.IntegrationTests.csproj` — 4/4.
+
+---
+
+## NSC-017 — Profile MaxRects and UI performance
+
+Проведён замер производительности без доработки кода: добавлена временная разметка `Stopwatch` в `NestingBenchmark` и тест `MainViewModelTests.Profile_NestAsync_UI_Overhead_WithManyRows`.
+
+### Результаты
+
+**Nesting benchmark** (`MultiPassNestingEngine`, 40 passes, 10 синтетических кейсов):
+
+| Case | Time, ms | Sheets | Unplaced | Util % |
+|---|---:|---:|---:|---:|
+| A | 68,0 | 1 | 0 | 82,82 |
+| B | 22,6 | 2 | 0 | 45,55 |
+| C | 18,7 | 1 | 0 | 51,76 |
+| D | 10,2 | 2 | 0 | 46,58 |
+| E | 3,3 | 1 | 0 | 51,76 |
+| F | 47,2 | 4 | 0 | 69,01 |
+| G | 32,4 | 2 | 0 | 51,41 |
+| H | 4,0 | 1 | 0 | 35,20 |
+| I | 3,5 | 1 | 0 | 19,84 |
+| J | 6,6 | 1 | 0 | 44,51 |
+| **Total** | **~227** | — | — | — |
+
+Production DXF-корпус (`NestingBenchmarkCorpusTests`): 9 файлов, 1 sheet, **76 ms**.
+
+**MainViewModel UI overhead** (`NestAsync` с `FakeNestingEngine` + `FakeDxfGeometryService`, 500 строк):
+
+- **14,1 ms** — подготовка входных данных, чтение geometry-заглушки, `RecomputeOversizedForAll`, обновление `Rows` и статуса.
+
+### Наблюдения
+
+- Раскрой на 40 проходах занимает единицы-десятки миллисекунд; общее время весьма невелико.
+- `MainViewModel` с 500 строками отрабатывает за ~14 ms, UI-оверхед пока не является bottleneck.
+- Потенциальные горячие участки (без изменения логики):
+  - `MaxRectsPacker.TryPlace` — вложенный цикл по `OrientationHelper.GetOrientations` и `_freeRectangles`, O(orientations × freeRects).
+  - `MaxRectsPacker.OverlapsEffectiveBounds` — `_effectiveBounds.Any(b => b.Intersects(occupied))`, O(n) на каждое размещение.
+  - `MaxRectsPacker.SplitFreeRectangles` — вложенные `.Any` на `List<Rect>`, O(n²) на каждый split.
+  - `MainViewModel.RecomputeOversizedForAll` — вызывается до и после `Nest`; на 500 строках незначителен, но масштабируется с квадратом? (надо отдельно исследовать при реальном размере).
+
+### Рекомендации
+
+- При реальном production-наборе с сотнями деталей/листов повторно замерить `MaxRectsPacker` с `Stopwatch` внутри `TryPlace`/`SplitFreeRectangles`.
+- Если появится задержка, рассмотреть:
+  - R-tree / interval tree для `OverlapsEffectiveBounds`;
+  - слияние и фильтрацию `freeRectangles` без O(n²) парных проверок;
+  - кэширование `Bounds`-информации при переборе ориентаций.
+- Профиль UI-рендеринга (`DataGrid`, `SheetThumbnailService`) требует ручного/визуального замера, т.к. юнит-тесты не запускают WPF-рендер.
+
+---
+
+## NSC-018 — ShelfPacker API cleanup и fallback
+
+- В `ShelfPacker.ToSheet` добавлен расчёт `UsedWidth`/`UsedHeight` и использование `Source.TrueArea` для `WasteArea`/`UtilizationPercent`, чтобы соответствовать `MaxRectsPacker`.
+- В `BoundingBoxShelfEngine` разделены `PackWithMaxRectsPacker` и `PackWithShelfPacker`.
+- Если `MaxRectsPacker` оставляет нерозмещённые детали, `PackGroup` дополнительно запускает `ShelfPacker` на той же сортировке и выбирает лучший результат по `NestingResultComparison.IsBetter`.
+- Добавлен `CreateShelfPacker` — упаковщик создаётся с теми же `margin`/`gap`/`resolution`.
+
+### Изменённые файлы
+
+- `src/NStCut.Nesting/Internals/ShelfPacker.cs`
+- `src/NStCut.Nesting/Services/BoundingBoxShelfEngine.cs`
+
+### Проверка
+
+- `dotnet build src/NStCut.sln` — 0 ошибок, 0 предупреждений.
+- `dotnet test src/NStCut.Nesting.Tests` — 76/76.
+- `dotnet test src/NStCut.App.Tests` — 162/162.
+
+---
+
+## NSC-019 — Quality Dashboard
+
+Добавлено отображение качества раскроя в `MainWindow` и `SheetPreviewWindow`, а также экспорт метрик в `NestingBenchmark` report.
+
+### Что сделано
+
+- `MainViewModel` получил `QualitySummary` и `UpdateQualitySummary` — после раскроя обновляется сводка: utilization, длина реза, остаточная площадь (Pockets/FreeRectangles), число карманов/отверстий, количество неразмещённых.
+- `SheetPreviewItemViewModel` получил `QualityText` — для каждого листа: utilization, длина реза, остаточная площадь, количество карманов, размер и форма самого большого кармана, число long-thin/deep карманов.
+- `MainWindow.xaml` — под статус-баром добавлен `TextBlock` с `QualitySummary`.
+- `SheetPreviewWindow.xaml` — под таблицей деталей на каждом листе добавлен `TextBlock` с `QualityText`.
+- `NestingBenchmark.BuildReport` — в итоговую таблицу добавлены столбцы `Residual Area` (остаточная площадь без учёта gap) и `Pockets` (число карманов/отверстий).
+
+### Изменённые файлы
+
+- `src/NStCut.App/ViewModels/MainViewModel.cs`
+- `src/NStCut.App/ViewModels/SheetPreviewViewModel.cs`
+- `src/NStCut.App/MainWindow.xaml`
+- `src/NStCut.App/Views/SheetPreviewWindow.xaml`
+- `src/NStCut.Nesting.Tests/NestingBenchmark.cs`
+
+### Проверка
+
+- `dotnet build src/NStCut.sln` — 0 ошибок, 0 предупреждений.
+- `dotnet test src/NStCut.App.Tests` — 162/162.
+- `dotnet test src/NStCut.Nesting.Tests` — 76/76.
+
+---
+
+## NSC-020 — Polygon / NFP research
+
+Добавлен базовый `NfpCalculator` для выпуклых многоугольников — первый шаг к true-polygon nesting.
+
+### Что сделано
+
+- `src/NStCut.Nesting/Internals/NfpCalculator.cs`:
+  - `ComputeNoFitPolygon(Polygon2D stationary, Polygon2D orbiting)` — NFP для двух выпуклых полигонов через попарные разности вершин и convex hull.
+  - Внутренний `IsConvex` и `ConvexHull` (Andrew's monotone chain).
+  - NFP возвращает `null` для невыпуклых полигонов (защита от некорректного применения).
+- `src/NStCut.Nesting.Tests/NfpCalculatorTests.cs`:
+  - Проверка NFP для двух квадратов.
+  - Проверка, что точка (0,0) внутри NFP при перекрытии.
+  - Проверка, что удалённая точка вне NFP.
+  - Проверка отказа для U-образного (non-convex) контура.
+
+### Изменённые файлы
+
+- `src/NStCut.Nesting/Internals/NfpCalculator.cs` (новый)
+- `src/NStCut.Nesting.Tests/NfpCalculatorTests.cs` (новый)
+
+### Проверка
+
+- `dotnet build src/NStCut.sln` — 0 ошибок, 0 предупреждений.
+- `dotnet test src/NStCut.Nesting.Tests` — 80/80.
+- `dotnet test src/NStCut.App.Tests` — 162/162.
+
+---
+
+## NSC-023 — Release build и installer stub
+
+Подготовлен Release-сборочный пайплайн и проверен `installer.iss`.
+
+### Что сделано
+
+- `installer.iss` присутствует в корне репозитория и настроен на:
+  - `NStCut.App.exe` из `src\\NStCut.App\\bin\\Release\\net8.0-windows\\`;
+  - ярлыки в меню "Пуск" и на рабочий стол (опционально);
+  - запуск приложения после установки.
+- Проверен Release-сборка всего решения и все тесты:
+  - `dotnet build src/NStCut.sln -c Release` — 0 ошибок, 0 предупреждений.
+  - `dotnet test src/NStCut.sln -c Release` — 337/337 (45 + 36 + 80 + 10 + 4 + 162).
+
+### Изменённые файлы
+
+- `installer.iss` (подтверждена корректность путей)
+
+### Проверка
+
+- `dotnet build src/NStCut.sln -c Release` — OK.
+- `dotnet test src/NStCut.sln -c Release` — 337/337.
+- Запуск EXE вручную не проверялся; упаковка `iscc` требует локальной установки Inno Setup.

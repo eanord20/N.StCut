@@ -150,7 +150,7 @@ public sealed class PartRow : INotifyPropertyChanged
     /// </summary>
     public bool IsOversized => _oversizedEvaluation?.IsOversized ?? false;
 
-    public void IncreaseQuantity() => Quantity += 1;
+    public void IncreaseQuantity() => Quantity = Quantity >= int.MaxValue ? int.MaxValue : Quantity + 1;
 
     public void DecreaseQuantity() => Quantity -= 1;
 

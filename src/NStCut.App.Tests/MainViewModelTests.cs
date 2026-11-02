@@ -1,4 +1,7 @@
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using NStCut.App.Models;
@@ -1195,7 +1198,7 @@ public class MainViewModelTests
 
             Assert.Equal(3, engine.ReceivedParts.Count);
             Assert.Equal(DxfGeometryQuality.Exact, vm.Rows.Single(row => row.Number == "exact.dxf").GeometryQuality);
-            Assert.Equal("Sheets: 0, unplaced: 0 (2 simplified)", vm.StatusText);
+            Assert.Equal("Sheets: 0, unplaced: 0 (heuristic; optimality not guaranteed) (2 simplified)", vm.StatusText);
         }
         finally
         {
@@ -1247,7 +1250,7 @@ public class MainViewModelTests
         Assert.Equal(default, row.Bounds);
         Assert.Equal(PartStatus.NotFound, row.Status);
         Assert.Equal(2, result.Unplaced.Count);
-        Assert.Equal("Sheets: 0, unplaced: 2", vm.StatusText);
+        Assert.Equal("Sheets: 0, unplaced: 2 (heuristic; optimality not guaranteed)", vm.StatusText);
     }
 
     [Fact]
@@ -1694,6 +1697,35 @@ public class MainViewModelTests
 
         Assert.True(string.IsNullOrEmpty(vm.ArrowGeometry));
     }
+
+    [Fact]
+    public async Task Profile_NestAsync_UI_Overhead_WithManyRows()
+    {
+        var vm = CreateViewModel(
+            nestingEngine: new FakeNestingEngine(),
+            dxfGeometry: new FakeDxfGeometryService());
+        vm.Materials.Add(new MaterialRow { Name = "Steel", Length = 2800, Width = 2070 });
+        var materialId = vm.Materials[0].Id;
+
+        for (var i = 0; i < 500; i++)
+        {
+            vm.Rows.Add(new PartRow
+            {
+                Number = $"P{i}",
+                DxfPath = $"part{i}.dxf",
+                MaterialId = materialId,
+                Quantity = 1,
+                IsEnabled = true
+            });
+        }
+
+        var sw = Stopwatch.StartNew();
+        var result = await vm.NestAsync();
+        sw.Stop();
+
+        Console.WriteLine($"MainViewModel.NestAsync with {vm.Rows.Count} rows: {sw.Elapsed.TotalMilliseconds:F1} ms");
+        Assert.NotNull(result);
+    }
 }
 
 internal sealed class FakeAppSettingsService : IAppSettingsService
@@ -1834,7 +1866,7 @@ internal sealed class FakeReportService : IReportService
 
     public void GenerateReport(string outputPath, string projectName, IReadOnlyList<Part> parts,
         IReadOnlyList<SheetMaterial> materials, IReadOnlyList<SheetInstance> sheets, IReadOnlyList<byte[]> sheetThumbnails,
-        ReportLabels? labels = null, CancellationToken cancellationToken = default)
+        ReportLabels? labels = null, ReportContentOptions? options = null, CancellationToken cancellationToken = default)
     {
         LastOutputPath = outputPath;
         LastLabels = labels;

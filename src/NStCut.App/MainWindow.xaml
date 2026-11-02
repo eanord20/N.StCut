@@ -36,6 +36,17 @@
 
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
+            <!-- ToolTip в тёмной теме по умолчанию рисуется системным стилем с тёмным текстом
+                 на тёмном фоне — принудительно темизируем фон/текст и ограничиваем ширину. -->
+            <Style TargetType="ToolTip">
+                <Setter Property="Background" Value="{DynamicResource MaterialDesignCardBackground}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource MaterialDesignBody}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="MaxWidth" Value="420" />
+            </Style>
+
             <x:Array x:Key="GrainModes" Type="{x:Type conv:GrainModeProxy}">
                 <conv:GrainModeProxy Value="FollowMaterial" />
                 <conv:GrainModeProxy Value="Allow90" />
@@ -57,6 +68,7 @@
                             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ContextMenuSelectManually}" Command="{Binding SelectFileManuallyCommand}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ContextMenuResolveAmbiguous}" Command="{Binding SelectAmbiguousFileCommand}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ContextMenuCopyDxfPath}" Command="{Binding CopyDxfPathCommand}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ContextMenuOpenDxfFile}" Command="{Binding OpenDxfFileCommand}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             <Separator />
                             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ContextMenuDeleteRow}" Command="{Binding DeleteRowCommand}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                         </ContextMenu>
@@ -91,44 +103,7 @@
                 <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuSaveProject}" Command="{Binding SaveProjectCommand}" />
             </MenuItem>
             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuNesting}">
-                <MenuItem StaysOpenOnClick="True" IsHitTestVisible="True">
-                    <MenuItem.Header>
-                        <Grid Margin="2">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="60" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelSheetMargin}" />
-                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SheetMarginMm, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintSheetMargin}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,2,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelPartGap}" />
-                            <TextBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,0" Text="{Binding PartGapMm, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" />
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="?" Cursor="Help" FontWeight="Bold" VerticalAlignment="Center" Margin="6,2,0,0" ToolTipService.InitialShowDelay="200" ToolTipService.ShowDuration="20000">
-                                <TextBlock.ToolTip>
-                                    <ToolTip MaxWidth="320">
-                                        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintPartGap}" TextWrapping="Wrap" />
-                                    </ToolTip>
-                                </TextBlock.ToolTip>
-                            </TextBlock>
-                        </Grid>
-                    </MenuItem.Header>
-                </MenuItem>
-                <Separator />
-                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuExportCombinedDxf}"
-                          IsCheckable="True"
-                          IsChecked="{Binding ExportCombinedDxf, Mode=TwoWay}"
-                          StaysOpenOnClick="True" />
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuReportSettings}" Command="{Binding OpenReportSettingsCommand}" />
             </MenuItem>
             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuLanguage}">
                 <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuEnglish}" Command="{Binding SetLanguageCommand}" CommandParameter="en" />
@@ -137,6 +112,9 @@
             <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuTheme}">
                 <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuThemeLight}" Command="{Binding SetThemeCommand}" CommandParameter="Light" />
                 <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuThemeDark}" Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+            </MenuItem>
+            <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuHelp}">
+                <MenuItem Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=MenuAbout}" Command="{Binding AboutCommand}" />
             </MenuItem>
         </Menu>
 
@@ -249,6 +227,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="6" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="6" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <controls:LabeledPathPicker Grid.Row="0"
                         Label="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelSearchPath}"
@@ -260,25 +240,33 @@
                         ButtonText="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonBrowse}"
                         PathValue="{Binding OutputPath, UpdateSourceTrigger=PropertyChanged}"
                         BrowseCommand="{Binding BrowseOutputPathCommand}" />
-                    <StackPanel Grid.Row="4" Orientation="Horizontal">
-                        <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatTotal}" />
-                        <TextBlock VerticalAlignment="Center" Margin="6,0,16,0" Text="{Binding TotalCount}" />
+                    <DockPanel Grid.Row="4" LastChildFill="False">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=LabelReportFileName}" />
+                            <TextBox Width="340" MinHeight="30" VerticalContentAlignment="Center"
+                                     Text="{Binding ReportFileName, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=HintReportFileName}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatTotal}" />
+                            <TextBlock VerticalAlignment="Center" Margin="6,0,16,0" Text="{Binding TotalCount}" />
 
-                        <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatFound}" />
-                        <Border VerticalAlignment="Center" Margin="6,0,16,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource FoundRowBrush}">
-                            <TextBlock Text="{Binding FoundCount}" FontWeight="SemiBold" />
-                        </Border>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatFound}" />
+                            <Border VerticalAlignment="Center" Margin="6,0,16,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource FoundRowBrush}">
+                                <TextBlock Text="{Binding FoundCount}" FontWeight="SemiBold" />
+                            </Border>
 
-                        <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatNotFound}" />
-                        <Border VerticalAlignment="Center" Margin="6,0,16,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource NotFoundRowBrush}">
-                            <TextBlock Text="{Binding NotFoundCount}" FontWeight="SemiBold" />
-                        </Border>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatNotFound}" />
+                            <Border VerticalAlignment="Center" Margin="6,0,16,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource NotFoundRowBrush}">
+                                <TextBlock Text="{Binding NotFoundCount}" FontWeight="SemiBold" />
+                            </Border>
 
-                        <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatAmbiguous}" />
-                        <Border VerticalAlignment="Center" Margin="6,0,0,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource AmbiguousRowBrush}">
-                            <TextBlock Text="{Binding AmbiguousCount}" FontWeight="SemiBold" />
-                        </Border>
-                    </StackPanel>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=StatAmbiguous}" />
+                            <Border VerticalAlignment="Center" Margin="6,0,0,0" Padding="8,2" CornerRadius="10" Background="{DynamicResource AmbiguousRowBrush}">
+                                <TextBlock Text="{Binding AmbiguousCount}" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
                 </Grid>
             </Grid>
         </Border>
@@ -501,10 +489,12 @@
                                         <materialDesign:PackIcon Kind="AlertOutline" Margin="2,0" VerticalAlignment="Center"
                                                                  Foreground="{DynamicResource GeometryWarningBrush}"
                                                                  ToolTip="{Binding GeometryDiagnosticText}"
+                                                                 ToolTipService.InitialShowDelay="200"
                                                                  Visibility="{Binding HasGeometryWarning, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         <materialDesign:PackIcon Kind="AlertCircleOutline" Margin="2,0" VerticalAlignment="Center"
                                                                  Foreground="{DynamicResource GeometryErrorBrush}"
                                                                  ToolTip="{Binding GeometryDiagnosticText}"
+                                                                 ToolTipService.InitialShowDelay="200"
                                                                  Visibility="{Binding HasGeometryError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -519,15 +509,26 @@
              выше (Row 2 карточки), без повтора (docs/UX_Audit.md, раздел 5.1, v3). -->
         <Border Grid.Row="6" Padding="8,4">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <!-- Индикатор занятости на время Nest/Export — раньше при длительной операции не было
                      никакой визуальной обратной связи (docs/UX_Audit.md, "Список изменений → Important"). -->
-                <ProgressBar Grid.Column="1" Height="16" Minimum="0" Maximum="100" Value="{Binding ProgressValue, Mode=OneWay}"
+                <ProgressBar Grid.Row="0" Grid.Column="1" Height="16" Minimum="0" Maximum="100" Value="{Binding ProgressValue, Mode=OneWay}"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource AppButtonStyle}"
+                        Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonCancel}"
+                        Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding QualitySummary}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource MaterialDesignBody}" FontSize="12" Margin="0,4,0,0" />
             </Grid>
         </Border>
     </Grid>

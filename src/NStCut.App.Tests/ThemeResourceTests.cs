@@ -198,6 +198,52 @@ public class ThemeResourceTests
     }
 
     [Fact]
+    public void MainWindowStatusCellIncludesGeometryDiagnosticsWithoutChangingResolveCommand()
+    {
+        var xamlPath = Path.Combine(
+            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
+            "..", "..", "..", "..", "NStCut.App", "MainWindow.xaml");
+        var xaml = File.ReadAllText(Path.GetFullPath(xamlPath));
+
+        var colStatusIndex = xaml.IndexOf("x:Name=\"ColStatus\"");
+        Assert.True(colStatusIndex > 0, "ColStatus column not found");
+        var cellStart = xaml.LastIndexOf("<DataGridTemplateColumn", colStatusIndex);
+        var cellEnd = xaml.IndexOf("</DataGridTemplateColumn>", cellStart) + "</DataGridTemplateColumn>".Length;
+        var statusCellXaml = xaml.Substring(cellStart, cellEnd - cellStart);
+
+        Assert.Contains("Visibility=\"{Binding HasGeometryWarning, Converter={StaticResource BooleanToVisibilityConverter}}\"", statusCellXaml);
+        Assert.Contains("Visibility=\"{Binding HasGeometryError, Converter={StaticResource BooleanToVisibilityConverter}}\"", statusCellXaml);
+        Assert.Equal(2, statusCellXaml.Split("ToolTip=\"{Binding GeometryDiagnosticText}\"").Length - 1);
+        Assert.Contains("Command=\"{Binding DataContext.ResolveStatusCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}\"", statusCellXaml);
+        Assert.Contains("CommandParameter=\"{Binding}\"", statusCellXaml);
+        Assert.Contains("Path=TooltipResolveDxf", statusCellXaml);
+        Assert.DoesNotContain("Background=\"Transparent\"", statusCellXaml);
+        Assert.Contains("Background=\"{DynamicResource AppTransparentBackgroundBrush}\"", statusCellXaml);
+    }
+
+    [Theory]
+    [InlineData(LightThemePath)]
+    [InlineData(DarkThemePath)]
+    public void GeometryDiagnosticBrushesExist(string path)
+    {
+        var dict = LoadDictionary(path);
+
+        Assert.IsType<SolidColorBrush>(dict["GeometryWarningBrush"]);
+        Assert.IsType<SolidColorBrush>(dict["GeometryErrorBrush"]);
+    }
+
+    [Theory]
+    [InlineData(LightThemePath)]
+    [InlineData(DarkThemePath)]
+    public void AppTransparentBackgroundBrushExists(string path)
+    {
+        var dict = LoadDictionary(path);
+        var brush = dict["AppTransparentBackgroundBrush"];
+        Assert.IsType<SolidColorBrush>(brush);
+        Assert.Equal(Colors.Transparent, ((SolidColorBrush)brush).Color);
+    }
+
+    [Fact]
     public void MainWindowXamlDoesNotHardcodeBrushesOrColors()
     {
         var xamlPath = Path.Combine(

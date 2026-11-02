@@ -1,13 +1,22 @@
 using System.IO;
+using System.Linq;
 using NStCut.Core.Constants;
 using NStCut.Core.Geometry;
 using NStCut.Core.Models;
 using NStCut.Nesting.Services;
+using Xunit.Abstractions;
 
 namespace NStCut.Nesting.Tests;
 
 public class MultiPassNestingEngineTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public MultiPassNestingEngineTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     private static Part CreatePart(string name, double w, double h, string materialId)
     {
         return new Part
@@ -201,5 +210,56 @@ public class MultiPassNestingEngineTests
         Assert.Equal(5, engine.LastPassLog.Count);
         Assert.Equal(1, engine.LastPassLog[0].Pass);
         Assert.Equal(5, engine.LastPassLog[4].Pass);
+    }
+
+    [Fact]
+    public void Nest_ControlExperiment_ProducesMultipleUniqueLayoutsAndLogsRanks()
+    {
+        var material = new SheetMaterial { Length = 2800, Width = 2070 };
+        var parts = new List<Part>
+        {
+            CreatePart("A", 1200, 600, material.Id),
+            CreatePart("B", 1000, 500, material.Id),
+            CreatePart("C", 800, 700, material.Id),
+            CreatePart("D", 600, 400, material.Id),
+            CreatePart("E", 500, 300, material.Id),
+            CreatePart("F", 400, 300, material.Id)
+        };
+
+        var engine = new MultiPassNestingEngine(new BoundingBoxShelfEngine());
+        var options = new NestingOptions
+        {
+            PartGapMm = 0,
+            SheetMarginMm = 0,
+            Resolution = 0.01,
+            MaxSearchPasses = 80,
+            NoImprovementStopCount = 80
+        };
+
+        var result = engine.Nest(parts, new[] { material }, options);
+
+        _output.WriteLine($"Total passes: {engine.LastSearchPasses}");
+        _output.WriteLine($"Unique layouts: {engine.LastPassLog.Select(l => l.LayoutHash).Distinct().Count()}");
+        _output.WriteLine($"Best result: sheets={result.Sheets.Count}, unplaced={result.Unplaced.Count}, utilization={result.TotalUtilizationPercent:F2}%, hash={result.LayoutHash}");
+        _output.WriteLine($"Preview hash: {result.LayoutHash}");
+
+        _output.WriteLine("Rank | Pass | Sheets | Unplaced | Utilization | UsedArea | Hash");
+        var ranked = engine.LastPassLog
+            .Select(l => l)
+            .OrderBy(l => l.Unplaced)
+            .ThenBy(l => l.Sheets)
+            .ThenByDescending(l => l.UtilizationPercent)
+            .ThenBy(l => l.UsedBoundingArea)
+            .Take(5)
+            .ToList();
+        for (var i = 0; i < ranked.Count; i++)
+        {
+            var p = ranked[i];
+            _output.WriteLine($"{i + 1,4} | {p.Pass,4} | {p.Sheets,6} | {p.Unplaced,8} | {p.UtilizationPercent,11:F2}% | {p.UsedBoundingArea,8:F0} | {p.LayoutHash}");
+        }
+
+        Assert.True(engine.LastPassLog.Count > 1, "At least two passes should be recorded.");
+        Assert.True(engine.LastPassLog.Select(l => l.LayoutHash).Distinct().Count() > 1, "Multiple passes must produce multiple unique layouts.");
+        Assert.Contains(result.LayoutHash, engine.LastPassLog.Select(l => l.LayoutHash));
     }
 }

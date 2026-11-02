@@ -8,6 +8,11 @@
     <PackageReference Include="DocX" Version="5.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="NStCut.Reports.Tests" />
+    <InternalsVisibleTo Include="NStCut.IntegrationTests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

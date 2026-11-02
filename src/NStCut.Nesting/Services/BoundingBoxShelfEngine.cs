@@ -1,5 +1,6 @@
 using NStCut.Core.Contracts;
 using NStCut.Core.Models;
+using NStCut.Core.Nesting;
 using NStCut.Nesting.Internals;
 
 namespace NStCut.Nesting.Services;
@@ -9,7 +10,8 @@ internal enum PackingStrategy
     MaxSide,
     Area,
     Width,
-    Height
+    Height,
+    AsGiven
 }
 
 public sealed class BoundingBoxShelfEngine : INestingEngine
@@ -49,7 +51,9 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
         CancellationToken cancellationToken)
     {
         var result = new NestingResult();
-        var materialDict = materials.ToDictionary(m => m.Id);
+        var materialDict = materials
+            .GroupBy(m => m.Id)
+            .ToDictionary(g => g.Key, g => g.First());
         var expanded = parts
             .SelectMany((part, stableIndex) => Enumerable.Range(1, Math.Max(0, part.Quantity))
                 .Select(copyIndex => (CopyIndex: copyIndex, Part: part, StableIndex: stableIndex)))
@@ -71,12 +75,13 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
                 continue;
             }
 
+            var effectiveOptions = EffectiveOptions(options, material);
             GroupCandidate? best = null;
             foreach (var strategy in strategies)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var candidate = PackGroup(groupCopies, material, options, strategy, cancellationToken);
-                if (best is null || IsBetter(candidate, best))
+                var candidate = PackGroup(groupCopies, material, effectiveOptions, strategy, cancellationToken);
+                if (best is null || IsBetter(candidate, best, options))
                     best = candidate;
             }
 
@@ -86,12 +91,69 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
             ReportProgress(progress, processed, totalParts);
         }
 
+        // Мягкий отступ: детали, не разместившиеся с заданным отступом, но
+        // влезающие в физический габарит листа, раскладываются повторно без
+        // отступа (на отдельных листах) и добавляются к результату.
+        if (options.AllowMarginRelax && result.Unplaced.Count > 0)
+        {
+            var relaxedOptions = new NestingOptions
+            {
+                PartGapMm = options.PartGapMm,
+                SheetMarginMm = 0,
+                Resolution = options.Resolution,
+                MaxSearchPasses = options.MaxSearchPasses,
+                NoImprovementStopCount = options.NoImprovementStopCount,
+                AcceptableMaxUnplaced = options.AcceptableMaxUnplaced,
+                AcceptableMaxSheets = options.AcceptableMaxSheets,
+                PlacementHeuristic = options.PlacementHeuristic,
+                OrientationPreference = options.OrientationPreference,
+                PackStrategyIndex = options.PackStrategyIndex,
+                EnableGapFilling = options.EnableGapFilling
+            };
+            var relaxed = NestCore(result.Unplaced, materials, relaxedOptions, strategies, null, cancellationToken);
+            if (relaxed.Sheets.Count > 0)
+            {
+                result.Sheets.AddRange(relaxed.Sheets);
+                result.Unplaced.Clear();
+                result.Unplaced.AddRange(relaxed.Unplaced);
+            }
+        }
+
+        // Sheets are numbered per material group during packing; renumber
+        // sequentially across the whole result so indices stay unique.
+        for (var i = 0; i < result.Sheets.Count; i++)
+            result.Sheets[i].Index = i + 1;
+
         var totalSheetArea = result.Sheets.Sum(sheet => sheet.Material.Length * sheet.Material.Width);
-        var totalPlacedArea = result.Sheets.Sum(sheet => sheet.Parts.Sum(part => part.Bounds.Area));
+        var totalPlacedArea = result.Sheets.Sum(sheet => sheet.Parts.Sum(part => part.Source.TrueArea));
         result.TotalUtilizationPercent = totalSheetArea > 0
             ? totalPlacedArea / totalSheetArea * 100.0
             : 0.0;
+        result.LayoutHash = LayoutHash.Compute(result.Sheets);
         return result;
+    }
+
+    /// <summary>Применяет переопределения отступа/зазора/мягкого отступа из материала.</summary>
+    private static NestingOptions EffectiveOptions(NestingOptions options, SheetMaterial material)
+    {
+        if (material.SheetMarginMm is null && material.PartGapMm is null && material.AllowMarginRelax is null)
+            return options;
+
+        return new NestingOptions
+        {
+            PartGapMm = material.PartGapMm is double g && double.IsFinite(g) ? Math.Max(0, g) : options.PartGapMm,
+            SheetMarginMm = material.SheetMarginMm is double m && double.IsFinite(m) ? Math.Max(0, m) : options.SheetMarginMm,
+            Resolution = options.Resolution,
+            MaxSearchPasses = options.MaxSearchPasses,
+            NoImprovementStopCount = options.NoImprovementStopCount,
+            AcceptableMaxUnplaced = options.AcceptableMaxUnplaced,
+            AcceptableMaxSheets = options.AcceptableMaxSheets,
+            PlacementHeuristic = options.PlacementHeuristic,
+            OrientationPreference = options.OrientationPreference,
+            PackStrategyIndex = options.PackStrategyIndex,
+            EnableGapFilling = options.EnableGapFilling,
+            AllowMarginRelax = material.AllowMarginRelax ?? options.AllowMarginRelax
+        };
     }
 
     private static GroupCandidate PackGroup(
@@ -101,16 +163,146 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
         PackingStrategy strategy,
         CancellationToken cancellationToken)
     {
-        var ordered = strategy switch
-        {
-            PackingStrategy.MaxSide => copies.OrderByDescending(x => Math.Max(x.Part.Bounds.Width, x.Part.Bounds.Height)),
-            PackingStrategy.Area => copies.OrderByDescending(x => x.Part.Bounds.Area),
-            PackingStrategy.Width => copies.OrderByDescending(x => x.Part.Bounds.Width),
-            PackingStrategy.Height => copies.OrderByDescending(x => x.Part.Bounds.Height),
-            _ => throw new ArgumentOutOfRangeException(nameof(strategy))
-        };
-        var sorted = ordered.ThenBy(x => x.StableIndex).ThenBy(x => x.CopyIndex).ToList();
+        var sorted = PackingSorter.Sort(copies, strategy);
+        var maxRects = PackWithMaxRectsPacker(sorted, material, options, cancellationToken);
+        if (maxRects.Unplaced.Count == 0)
+            return maxRects;
+
+        var shelf = PackWithShelfPacker(sorted, material, options, cancellationToken);
+        return IsBetter(shelf, maxRects, options) ? shelf : maxRects;
+    }
+
+    private static GroupCandidate PackWithMaxRectsPacker(
+        IReadOnlyList<(int CopyIndex, Part Part, int StableIndex)> sorted,
+        SheetMaterial material,
+        NestingOptions options,
+        CancellationToken cancellationToken)
+    {
         var packers = new List<MaxRectsPacker>();
+        var unplaced = new List<Part>();
+        var unplacedCopyIndex = new Dictionary<Part, int>();
+
+        foreach (var (copyIndex, part, _) in sorted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var placed = packers.Any(packer => packer.TryPlace(part, copyIndex));
+            if (!placed && options.AllowMarginRelax)
+                placed = TryPlaceRelaxed(packers, part, copyIndex, material, options);
+            if (placed)
+                continue;
+
+            var newPacker = CreatePacker(material, options);
+            if (newPacker.TryPlace(part, copyIndex))
+            {
+                packers.Add(newPacker);
+            }
+            else
+            {
+                var clone = CloneForUnplaced(part);
+                unplaced.Add(clone);
+                unplacedCopyIndex[clone] = copyIndex;
+            }
+        }
+
+        GapFillingPacker.FillAndCompact(packers, unplaced, options, unplacedCopyIndex);
+
+        if (options.AllowMarginRelax)
+            TryPlaceRelaxedIntoExistingSheets(packers, unplaced, material, options, unplacedCopyIndex);
+
+        var sheets = packers.Where(p => p.Parts.Count > 0)
+            .Select((packer, index) => packer.ToSheet(index + 1))
+            .ToList();
+        var sheetArea = material.Length * material.Width;
+        var utilization = sheets.Count > 0 && sheetArea > 0
+            ? sheets.Sum(s => s.Parts.Sum(p => p.Source.TrueArea)) / (sheetArea * sheets.Count)
+            : 0;
+        return new GroupCandidate(sheets, unplaced, utilization);
+    }
+
+    /// <summary>
+    /// Мягкий отступ: пытаемся влить деталь в свободное место уже заполненного
+    /// листа — отступ игнорируется только для этой детали, зазор до соседей
+    /// сохраняется. Возвращает true при успешном размещении.
+    /// </summary>
+    private static bool TryPlaceRelaxed(
+        List<MaxRectsPacker> packers,
+        Part part,
+        int copyIndex,
+        SheetMaterial material,
+        NestingOptions options)
+    {
+        var gap = double.IsFinite(options.PartGapMm) ? Math.Max(0, options.PartGapMm) : 0;
+        var resolution = double.IsFinite(options.Resolution) ? Math.Max(0, options.Resolution) : 0;
+
+        var fitsPhysically = OrientationHelper
+            .GetOrientations(part, material, resolution)
+            .Any(o => NestingComparison.FitsWithin(o.Width, material.Length) &&
+                      NestingComparison.FitsWithin(o.Height, material.Width));
+        if (!fitsPhysically)
+            return false;
+
+        foreach (var packer in packers)
+        {
+            // Сиды: лист без отступа, засеянный уже размещёнными деталями —
+            // свободные прямоугольники покрывают и кромочную зону.
+            var seed = new MaxRectsPacker(material, 0, gap, resolution,
+                options.PlacementHeuristic, options.OrientationPreference);
+            var seeded = true;
+            foreach (var existing in packer.Parts)
+            {
+                try
+                {
+                    seed.PlaceExisting(existing);
+                }
+                catch (InvalidOperationException)
+                {
+                    seeded = false;
+                    break;
+                }
+            }
+            if (!seeded)
+                break;
+
+            if (!seed.TryPlace(part, copyIndex))
+                continue;
+
+            var placed = seed.Parts[seed.Parts.Count - 1];
+            packer.RegisterRelaxedPlacement(placed);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Мягкий отступ (пост-проход): для деталей, оставшихся неразмещёнными после
+    /// gap-filling, пробуем влить их в свободное место существующих листов.
+    /// </summary>
+    private static void TryPlaceRelaxedIntoExistingSheets(
+        List<MaxRectsPacker> packers,
+        List<Part> unplaced,
+        SheetMaterial material,
+        NestingOptions options,
+        IReadOnlyDictionary<Part, int> copyIndexOf)
+    {
+        if (unplaced.Count == 0 || packers.Count == 0)
+            return;
+
+        foreach (var part in unplaced.OrderByDescending(p => p.TrueArea).ToList())
+        {
+            var copyIndex = copyIndexOf.TryGetValue(part, out var ci) ? ci : 1;
+            if (TryPlaceRelaxed(packers, part, copyIndex, material, options))
+                unplaced.Remove(part);
+        }
+    }
+
+    private static GroupCandidate PackWithShelfPacker(
+        IReadOnlyList<(int CopyIndex, Part Part, int StableIndex)> sorted,
+        SheetMaterial material,
+        NestingOptions options,
+        CancellationToken cancellationToken)
+    {
+        var packers = new List<ShelfPacker>();
         var unplaced = new List<Part>();
 
         foreach (var (copyIndex, part, _) in sorted)
@@ -120,7 +312,7 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
             if (placed)
                 continue;
 
-            var newPacker = CreatePacker(material, options);
+            var newPacker = CreateShelfPacker(material, options);
             if (newPacker.TryPlace(part, copyIndex))
                 packers.Add(newPacker);
             else
@@ -132,23 +324,33 @@ public sealed class BoundingBoxShelfEngine : INestingEngine
             .ToList();
         var sheetArea = material.Length * material.Width;
         var utilization = sheets.Count > 0 && sheetArea > 0
-            ? sheets.Sum(s => s.Parts.Sum(p => p.Bounds.Area)) / (sheetArea * sheets.Count)
+            ? sheets.Sum(s => s.Parts.Sum(p => p.Source.TrueArea)) / (sheetArea * sheets.Count)
             : 0;
         return new GroupCandidate(sheets, unplaced, utilization);
     }
 
-    private static bool IsBetter(GroupCandidate candidate, GroupCandidate current)
+    private static bool IsBetter(GroupCandidate candidate, GroupCandidate current, NestingOptions options)
     {
-        if (candidate.Unplaced.Count != current.Unplaced.Count)
-            return candidate.Unplaced.Count < current.Unplaced.Count;
-        if (candidate.Sheets.Count != current.Sheets.Count)
-            return candidate.Sheets.Count < current.Sheets.Count;
-        return candidate.Utilization > current.Utilization;
+        var candidateResult = ToNestingResult(candidate);
+        var currentResult = ToNestingResult(current);
+        return NestingResultComparison.IsBetter(candidateResult, currentResult, options);
+    }
+
+    private static NestingResult ToNestingResult(GroupCandidate candidate)
+    {
+        var result = new NestingResult();
+        result.Sheets.AddRange(candidate.Sheets);
+        result.Unplaced.AddRange(candidate.Unplaced);
+        result.TotalUtilizationPercent = candidate.Utilization * 100.0;
+        return result;
     }
 
     private static MaxRectsPacker CreatePacker(SheetMaterial material, NestingOptions options) =>
         new(material, options.SheetMarginMm, options.PartGapMm, options.Resolution,
             options.PlacementHeuristic, options.OrientationPreference);
+
+    private static ShelfPacker CreateShelfPacker(SheetMaterial material, NestingOptions options) =>
+        new(material, options.SheetMarginMm, options.PartGapMm, options.Resolution);
 
     private static void ReportProgress(IProgress<double>? progress, int processed, int totalParts)
     {

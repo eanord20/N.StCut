@@ -1,18 +1,32 @@
+<!-- Приведено к общей дизайн-системе приложения (тема Light/Dark, шрифты, отступы) — было "голым"
+     WPF-окном без стилей MaterialDesign (docs/UX_Audit.md, "Список изменений по приоритету → Critical"). -->
 <Window x:Class="NStCut.App.Views.CandidateSelectWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Select DXF file" Height="300" Width="500">
+        xmlns:loc="clr-namespace:NStCut.App.Services"
+        Title="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=CandidateSelectTitle}" Height="300" Width="600"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}">
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Several files match. Select one:" Margin="0,0,0,8" />
-        <ListBox x:Name="CandidatesListBox" Grid.Row="1" DisplayMemberPath="." />
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="OK" IsDefault="True" Click="Ok_Click" Margin="0,0,8,0" />
-            <Button Content="Cancel" IsCancel="True" Click="Cancel_Click" />
+        <TextBlock Text="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=CandidateSelectPrompt}" Margin="0,0,0,8" />
+        <Border Grid.Row="1" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1" CornerRadius="4">
+            <ListBox x:Name="CandidatesListBox" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" ToolTip="{Binding}" TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+        <StackPanel Grid.Row="2" Margin="0,8,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonOk}" IsDefault="True" Click="Ok_Click" />
+            <Button Style="{StaticResource AppButtonStyle}" Content="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonCancel}" IsCancel="True" Margin="0" Click="Cancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

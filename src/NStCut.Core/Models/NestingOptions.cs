@@ -15,5 +15,8 @@ public sealed class NestingOptions
     public PlacementHeuristic PlacementHeuristic { get; set; } = AppConstants.DefaultPlacementHeuristic;
     public OrientationPreference OrientationPreference { get; set; } = AppConstants.DefaultOrientationPreference;
     public int PackStrategyIndex { get; set; } = AppConstants.DefaultPackStrategyIndex;
+    public bool EnableGapFilling { get; set; } = AppConstants.DefaultEnableGapFilling;
+    /// <summary>Разрешить детали, не помещающейся с отступом, размещаться у края листа (отступ игнорируется только для таких деталей).</summary>
+    public bool AllowMarginRelax { get; set; } = AppConstants.DefaultAllowMarginRelax;
     public string? LogFilePath { get; set; }
 }

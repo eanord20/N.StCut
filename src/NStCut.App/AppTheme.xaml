@@ -9,6 +9,9 @@
     <SolidColorBrush x:Key="DuplicateNumberBrush" Color="#E53935" />
     <SolidColorBrush x:Key="OversizedBorderBrush" Color="#D32F2F" />
     <SolidColorBrush x:Key="ActiveSectionBrush" Color="#BBDEFB" />
+    <SolidColorBrush x:Key="GeometryWarningBrush" Color="#F57C00" />
+    <SolidColorBrush x:Key="GeometryErrorBrush" Color="#D32F2F" />
+    <SolidColorBrush x:Key="AppTransparentBackgroundBrush" Color="Transparent" />
     <Thickness x:Key="CardPadding">8</Thickness>
     <Thickness x:Key="SmallMargin">6</Thickness>
     <sys:Double x:Key="DefaultFontSize">13</sys:Double>
@@ -199,5 +202,13 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Чекбокс с видимой подписью (AppCheckBoxStyle обрезает контент фиксированными 20x20) -->
+    <Style x:Key="AppCheckBoxLabeledStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource AppCheckBoxStyle}">
+        <Setter Property="Width" Value="Auto" />
+        <Setter Property="Height" Value="Auto" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Padding" Value="4,0" />
     </Style>
 </ResourceDictionary>

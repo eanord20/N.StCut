@@ -21,13 +21,15 @@ internal sealed class MaxRectsPacker
     private readonly double _margin;
     private readonly double _gap;
     private readonly double _resolution;
+    private readonly double _usableWidth;
+    private readonly double _usableHeight;
     private readonly PlacementHeuristic _placementHeuristic;
     private readonly OrientationPreference _orientationPreference;
     private readonly List<Rect> _freeRectangles = new();
     private readonly List<Rect> _effectiveBounds = new();
 
     public List<PlacedPart> Parts { get; } = new();
-    public double PlacedArea { get; private set; }
+    public double PlacedArea { get; internal set; }
     internal IReadOnlyList<Rect> FreeRectangles => _freeRectangles;
     internal IReadOnlyList<Rect> EffectiveBounds => _effectiveBounds;
 
@@ -36,16 +38,16 @@ internal sealed class MaxRectsPacker
         OrientationPreference orientationPreference = OrientationPreference.Original)
     {
         _material = material;
-        _margin = margin;
-        _gap = gap;
-        _resolution = Math.Max(0, resolution);
+        _margin = double.IsFinite(margin) ? Math.Max(0, margin) : 0;
+        _gap = double.IsFinite(gap) ? Math.Max(0, gap) : 0;
+        _resolution = double.IsFinite(resolution) ? Math.Max(0, resolution) : 0;
         _placementHeuristic = placementHeuristic;
         _orientationPreference = orientationPreference;
 
-        var usableWidth = material.Length - 2 * margin;
-        var usableHeight = material.Width - 2 * margin;
-        if (usableWidth > _resolution && usableHeight > _resolution)
-            _freeRectangles.Add(new Rect(0, 0, usableWidth, usableHeight));
+        _usableWidth = material.Length - 2 * _margin;
+        _usableHeight = material.Width - 2 * _margin;
+        if (_usableWidth > 0 && _usableHeight > 0)
+            _freeRectangles.Add(new Rect(0, 0, _usableWidth + _gap, _usableHeight + _gap));
     }
 
     public bool TryPlace(Part part, int copyIndex)
@@ -60,6 +62,8 @@ internal sealed class MaxRectsPacker
             {
                 if (!NestingComparison.FitsWithin(effectiveWidth, free.Width) ||
                     !NestingComparison.FitsWithin(effectiveHeight, free.Height))
+                    continue;
+                if (!PhysicalBoundsFit(free.X, free.Y, width, height))
                     continue;
 
                 var remainingWidth = Math.Max(0, free.Width - effectiveWidth);
@@ -78,6 +82,9 @@ internal sealed class MaxRectsPacker
         var selected = best.Value;
         var effectiveBounds = new Rect(selected.FreeRect.X, selected.FreeRect.Y,
             selected.EffectiveWidth, selected.EffectiveHeight);
+        if (OverlapsEffectiveBounds(effectiveBounds))
+            return false;
+
         SplitFreeRectangles(effectiveBounds);
         _effectiveBounds.Add(effectiveBounds);
 
@@ -94,6 +101,71 @@ internal sealed class MaxRectsPacker
         PlacedArea += selected.Width * selected.Height;
         return true;
     }
+
+    /// <summary>
+    /// Places a part inside a specific target free rectangle. Used by the gap-filling
+    /// post-pass to fit parts into pockets that are not in the current MaxRects list.
+    /// </summary>
+    public bool TryPlaceAt(Rect target, Part part, int copyIndex)
+    {
+        Candidate? best = null;
+        var orientationOrder = 0;
+        foreach (var (width, height) in OrientationHelper.GetOrientations(part, _material, _resolution))
+        {
+            var effectiveWidth = width + _gap;
+            var effectiveHeight = height + _gap;
+            if (!NestingComparison.FitsWithin(effectiveWidth, target.Width) ||
+                !NestingComparison.FitsWithin(effectiveHeight, target.Height) ||
+                !PhysicalBoundsFit(target.X, target.Y, width, height))
+            {
+                orientationOrder++;
+                continue;
+            }
+
+            var remainingWidth = Math.Max(0, target.Width - effectiveWidth);
+            var remainingHeight = Math.Max(0, target.Height - effectiveHeight);
+            var candidate = new Candidate(target, width, height, effectiveWidth, effectiveHeight,
+                orientationOrder, Math.Min(remainingWidth, remainingHeight), Math.Max(remainingWidth, remainingHeight));
+            if (best is null || IsBetter(candidate, best.Value))
+                best = candidate;
+
+            orientationOrder++;
+        }
+
+        if (best is null)
+            return false;
+
+        var selected = best.Value;
+        var effectiveBounds = new Rect(selected.FreeRect.X, selected.FreeRect.Y,
+            selected.EffectiveWidth, selected.EffectiveHeight);
+        if (OverlapsEffectiveBounds(effectiveBounds))
+            return false;
+
+        SplitFreeRectangles(effectiveBounds);
+        _effectiveBounds.Add(effectiveBounds);
+
+        var x = _margin + selected.FreeRect.X;
+        var y = _margin + selected.FreeRect.Y;
+        Parts.Add(new PlacedPart
+        {
+            Source = part,
+            CopyIndex = copyIndex,
+            Position = new Point(x, y),
+            Rotation = selected.OrientationOrder == 0 ? 0 : 90,
+            Bounds = new Rect(x, y, selected.Width, selected.Height)
+        });
+        PlacedArea += selected.Width * selected.Height;
+        return true;
+    }
+
+    private bool PhysicalBoundsFit(double x, double y, double width, double height) =>
+        double.IsFinite(x) && double.IsFinite(y) &&
+        double.IsFinite(width) && double.IsFinite(height) &&
+        x >= 0 && y >= 0 && width > 0 && height > 0 &&
+        NestingComparison.FitsWithin(x + width, _usableWidth) &&
+        NestingComparison.FitsWithin(y + height, _usableHeight);
+
+    private bool OverlapsEffectiveBounds(Rect occupied) => _effectiveBounds.Any(b => b.Intersects(occupied));
 
     private bool IsBetter(Candidate candidate, Candidate current)
     {
@@ -204,13 +276,81 @@ internal sealed class MaxRectsPacker
         container.Right >= contained.Right - _resolution &&
         container.Top >= contained.Top - _resolution;
 
+    /// <summary>Places a part that is already positioned in the sheet, preserving its coordinates.</summary>
+    internal void PlaceExisting(PlacedPart existing)
+    {
+        var localX = existing.Bounds.X - _margin;
+        var localY = existing.Bounds.Y - _margin;
+        if (!PhysicalBoundsFit(localX, localY, existing.Bounds.Width, existing.Bounds.Height))
+            throw new InvalidOperationException("Existing placement lies outside the physical usable sheet bounds.");
+
+        var effectiveW = existing.Bounds.Width + _gap;
+        var effectiveH = existing.Bounds.Height + _gap;
+        var occupied = new Rect(localX, localY, effectiveW, effectiveH);
+        if (OverlapsEffectiveBounds(occupied))
+            throw new InvalidOperationException("Existing placement overlaps or violates part gap.");
+
+        SplitFreeRectangles(occupied);
+        _effectiveBounds.Add(occupied);
+        Parts.Add(existing);
+        PlacedArea += existing.Bounds.Width * existing.Bounds.Height;
+    }
+
+    /// <summary>
+    /// Registers a part placed without sheet margin (soft-margin mode): the part may
+    /// extend into the margin band, so the physical-bounds check is skipped, but the
+    /// occupied region is still recorded so subsequent placements cannot overlap it.
+    /// </summary>
+    internal void RegisterRelaxedPlacement(PlacedPart relaxed)
+    {
+        var localX = relaxed.Bounds.X - _margin;
+        var localY = relaxed.Bounds.Y - _margin;
+        var effectiveW = relaxed.Bounds.Width + _gap;
+        var effectiveH = relaxed.Bounds.Height + _gap;
+        var occupied = new Rect(localX, localY, effectiveW, effectiveH);
+        if (OverlapsEffectiveBounds(occupied))
+            throw new InvalidOperationException("Relaxed placement overlaps or violates part gap.");
+
+        SplitFreeRectangles(occupied);
+        _effectiveBounds.Add(occupied);
+        Parts.Add(relaxed);
+        PlacedArea += relaxed.Bounds.Width * relaxed.Bounds.Height;
+    }
+
+    /// <summary>Creates a new packer and re-places the given parts at their existing positions.</summary>
+    internal MaxRectsPacker Repack(IEnumerable<PlacedPart> parts)
+    {
+        var packer = new MaxRectsPacker(_material, _margin, _gap, _resolution, _placementHeuristic, _orientationPreference);
+        foreach (var part in parts)
+            packer.PlaceExisting(part);
+        return packer;
+    }
+
     public SheetInstance ToSheet(int index)
     {
         var sheet = new SheetInstance { Material = _material, Index = index };
         sheet.Parts.AddRange(Parts);
         var sheetArea = _material.Length * _material.Width;
-        sheet.WasteArea = sheetArea - PlacedArea;
-        sheet.UtilizationPercent = sheetArea > 0 ? PlacedArea / sheetArea * 100.0 : 0.0;
+        var truePlacedArea = Parts.Sum(p => p.Source.TrueArea);
+        sheet.WasteArea = sheetArea - truePlacedArea;
+        sheet.UtilizationPercent = sheetArea > 0 ? truePlacedArea / sheetArea * 100.0 : 0.0;
+        sheet.UsedWidth = Parts.Count > 0 ? Parts.Max(p => p.Bounds.Right) : 0.0;
+        sheet.UsedHeight = Parts.Count > 0 ? Parts.Max(p => p.Bounds.Top) : 0.0;
+        foreach (var free in _freeRectangles)
+            sheet.FreeRectangles.Add(new Rect(_margin + free.X, _margin + free.Y, free.Width, free.Height));
+
+        var pocketAnalysis = FreeSpaceAnalyzer.Analyze(_freeRectangles);
+        foreach (var pocket in pocketAnalysis.Pockets)
+        {
+            var offsetCells = pocket.Cells
+                .Select(c => new Rect(_margin + c.X, _margin + c.Y, c.Width, c.Height))
+                .ToList();
+            var largest = pocket.LargestInscribedRectangle;
+            var offsetLargest = new Rect(_margin + largest.X, _margin + largest.Y, largest.Width, largest.Height);
+            sheet.Pockets.Add(new Pocket(offsetCells, pocket.Area, offsetLargest,
+                pocket.IsValuable, pocket.IsUseful, pocket.IsLongThin, pocket.IsDeepPocket));
+        }
+
         return sheet;
     }
 }

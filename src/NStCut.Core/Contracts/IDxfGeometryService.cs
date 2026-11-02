@@ -24,7 +24,10 @@ public enum DxfGeometryDiagnosticCode
     BulgeUnavailable,
     InvalidClosedLoop,
     NoClosedContour,
-    NoUsableBounds
+    NoUsableBounds,
+    AdditionalContoursIgnored,
+    DuplicateContourIgnored,
+    SelfIntersectingContour
 }
 
 public sealed record DxfGeometryDiagnostic(DxfGeometryDiagnosticCode Code);

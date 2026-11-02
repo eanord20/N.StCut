@@ -18,3 +18,9 @@ Desktop.ini
 
 # Devin SDD scratch workspace
 .superpowers/
+
+# Installer output
+installer_output/
+
+# Independent test reports & scratch harnesses
+test-reports/

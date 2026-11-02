@@ -6,17 +6,13 @@ namespace NStCut.Core.Nesting;
 public static class NestingResultComparison
 {
     /// <summary>
-    /// Returns <c>true</c> when <paramref name="candidate"/> is strictly better than <paramref name="current"/>.
-    /// Better means fewer unplaced parts, then fewer sheets, then higher total utilization.
+    /// Returns <c>true</c> when <paramref name="candidate"/> is strictly better than <paramref name="current"/>
+    /// according to the full nesting objective function defined in <c>nesting-objective-function.md</c>.
     /// </summary>
-    public static bool IsBetter(NestingResult candidate, NestingResult current)
+    public static bool IsBetter(NestingResult candidate, NestingResult current, NestingOptions? options = null)
     {
-        if (candidate.Unplaced.Count != current.Unplaced.Count)
-            return candidate.Unplaced.Count < current.Unplaced.Count;
-
-        if (candidate.Sheets.Count != current.Sheets.Count)
-            return candidate.Sheets.Count < current.Sheets.Count;
-
-        return candidate.TotalUtilizationPercent > current.TotalUtilizationPercent;
+        var candidateScore = NestingQualityMetrics.Compute(candidate, options);
+        var currentScore = NestingQualityMetrics.Compute(current, options);
+        return candidateScore.IsBetterThan(currentScore);
     }
 }

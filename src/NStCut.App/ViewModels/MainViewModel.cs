@@ -49,6 +49,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _outputPath = string.Empty;
     private string _projectName = "N.StCut Project";
     private string _statusText = string.Empty;
+    private string _qualitySummary = string.Empty;
     private string? _oversizedStatusText;
     private double _progressValue;
     private bool _isBusy;
@@ -67,6 +68,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _suspendRecompute;
     private bool _loadingSettings;
     private bool _exportCombinedDxf;
+    private bool _allowMarginRelax;
     private AppTheme _currentTheme = AppTheme.Light;
 
     private sealed class Snapshot(List<PartRow> rows, List<MaterialRow> materials)
@@ -150,6 +152,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         PasteFromClipboardCommand = new RelayCommand(_ => PasteFromClipboard());
         ImportExcelFileCommand = new RelayCommand(_ => ImportExcelFile());
         OpenMaterialsCommand = new RelayCommand(_ => OpenMaterialsWindow());
+        OpenReportSettingsCommand = new RelayCommand(_ => OpenReportSettingsWindow());
         NestCommand = new RelayCommand(_ => Nest(), _ => CanNest());
         ExportDxfCommand = new RelayCommand(_ => ExportDxf(), _ => _nestingResultManager.HasResult && !IsBusy);
         ExportReportCommand = new RelayCommand(_ => ExportReport(), _ => _nestingResultManager.HasResult && !IsBusy);
@@ -162,6 +165,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SelectFileManuallyCommand = new RelayCommand(row => SelectFileManually(row as PartRow), row => row is PartRow);
         SelectAmbiguousFileCommand = new RelayCommand(row => SelectAmbiguousFile(row as PartRow), row => row is PartRow p && p.Status == PartStatus.Ambiguous);
         CopyDxfPathCommand = new RelayCommand(row => CopyDxfPath(row as PartRow), row => row is PartRow p && !string.IsNullOrWhiteSpace(p.DxfPath));
+        OpenDxfFileCommand = new RelayCommand(row => OpenDxfFile(row as PartRow), row => row is PartRow p && p.Status == PartStatus.Found && !string.IsNullOrWhiteSpace(p.DxfPath) && File.Exists(p.DxfPath));
         ResolveStatusCommand = new RelayCommand(row => ResolveStatus(row as PartRow));
         IncreaseQuantityCommand = new RelayCommand(row => (row as PartRow)?.IncreaseQuantity());
         DecreaseQuantityCommand = new RelayCommand(row => (row as PartRow)?.DecreaseQuantity());
@@ -170,6 +174,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AddMaterialCommand = new RelayCommand(param => AddMaterial(param));
         SetLanguageCommand = new RelayCommand(lang => SetLanguage(lang));
         SetThemeCommand = new RelayCommand(theme => SetTheme(theme));
+        AboutCommand = new RelayCommand(_ => ShowAbout());
 
         LoadAppSettings();
         RecomputeCanNest();
@@ -181,6 +186,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// передаёт их в AppSettingsService, не зная о самом DataGrid (см. AppSettings.PartsGridColumnWidths).
     /// </summary>
     public Dictionary<string, double> PartsGridColumnWidths { get; private set; } = new();
+
+    /// <summary>Ширины столбцов таблицы библиотеки материалов (MaterialsWindow), сохраняются в AppSettings.</summary>
+    public Dictionary<string, double> MaterialsGridColumnWidths { get; private set; } = new();
 
     /// <summary>Восстанавливает папки поиска/сохранения, параметры раскроя, язык и тему из прошлого запуска.</summary>
     private void LoadAppSettings()
@@ -201,7 +209,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _currentTheme = ThemeService.TryParse(settings.Theme, out var theme) ? theme : AppTheme.Light;
             ThemeService.Apply(_currentTheme);
             ExportCombinedDxf = settings.ExportCombinedDxf;
+            AllowMarginRelax = settings.AllowMarginRelax;
+            Report = settings.Report ?? new ReportSettings();
+            OnPropertyChanged(nameof(ReportFileName));
             PartsGridColumnWidths = settings.PartsGridColumnWidths ?? new();
+            MaterialsGridColumnWidths = settings.MaterialsGridColumnWidths ?? new();
         }
         finally
         {
@@ -225,7 +237,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Culture = _localization.Culture,
             Theme = _currentTheme.ToString(),
             ExportCombinedDxf = ExportCombinedDxf,
-            PartsGridColumnWidths = PartsGridColumnWidths
+            AllowMarginRelax = AllowMarginRelax,
+            Report = Report,
+            PartsGridColumnWidths = PartsGridColumnWidths,
+            MaterialsGridColumnWidths = MaterialsGridColumnWidths
         });
     }
 
@@ -383,10 +398,48 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Настройки генерации отчёта; редактируются в окне настроек отчёта.</summary>
+    public ReportSettings Report { get; private set; } = new();
+
+    /// <summary>Имя файла отчёта на главном экране; пустое — имя по умолчанию (дата/время).</summary>
+    public string ReportFileName
+    {
+        get => Report.FileName;
+        set
+        {
+            Report = Report with { FileName = value ?? string.Empty };
+            OnPropertyChanged();
+            if (!_loadingSettings) SaveAppSettings();
+        }
+    }
+
+    /// <summary>Разрешить детали, не влезающей с отступом, размещаться у края листа.</summary>
+    public bool AllowMarginRelax
+    {
+        get => _allowMarginRelax;
+        set
+        {
+            _allowMarginRelax = value;
+            OnPropertyChanged();
+            if (!_loadingSettings)
+            {
+                InvalidateNestingResult();
+                RecomputeOversizedForAll();
+                SaveAppSettings();
+            }
+        }
+    }
+
     public string StatusText
     {
         get => _statusText;
         set { _statusText = value; OnPropertyChanged(); }
+    }
+
+    public string QualitySummary
+    {
+        get => _qualitySummary;
+        private set { _qualitySummary = value; OnPropertyChanged(); }
     }
 
     public double ProgressValue
@@ -438,6 +491,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand PasteFromClipboardCommand { get; }
     public ICommand ImportExcelFileCommand { get; }
     public ICommand OpenMaterialsCommand { get; }
+    public ICommand OpenReportSettingsCommand { get; }
     public ICommand NestCommand { get; }
     public ICommand ExportDxfCommand { get; }
     public ICommand ExportReportCommand { get; }
@@ -458,6 +512,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand AddMaterialCommand { get; }
     public ICommand SetLanguageCommand { get; }
     public ICommand SetThemeCommand { get; }
+    public ICommand AboutCommand { get; }
+    public ICommand OpenDxfFileCommand { get; }
 
     public IEnumerable<SheetMaterial> AvailableLibraryMaterials
         => _materialsLibraryService.Load()
@@ -694,6 +750,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// (docs/Audit_Performance.md, issue P6).
     /// </summary>
     private bool _canNestCache;
+    private int _inputVersion;
 
     private void RecomputeCanNest()
     {
@@ -703,6 +760,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void InvalidateNestingResult()
     {
+        // Любое изменение входных данных повышает версию снимка: результат,
+        // вычисленный по старому снимку, не должен публиковаться (race fix).
+        _inputVersion++;
         if (!_nestingResultManager.HasResult)
             return;
 
@@ -759,6 +819,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (_oversizedStatusText != null && StatusText == _oversizedStatusText)
             StatusText = string.Empty;
         _oversizedStatusText = null;
+    }
+
+    private void UpdateQualitySummary(NestingResult result)
+    {
+        var sheets = result.Sheets;
+        var totalCut = sheets.Sum(s => s.Parts.Sum(p => p.Source is null
+            ? 2.0 * (p.Bounds.Width + p.Bounds.Height)
+            : p.Source.TruePerimeter));
+        var residual = sheets.Sum(s => s.Pockets.Count > 0
+            ? s.Pockets.Sum(p => p.Area)
+            : s.FreeRectangles.Sum(r => r.Area));
+        var pockets = sheets.Sum(s => s.Pockets.Count);
+        var score = NestingQualityMetrics.Compute(result);
+
+        QualitySummary = $"""
+            Utilization: {score.TrueUtilizationPercent:F2}%
+            Cut length: {totalCut:F0} mm
+            Residual area: {residual:F0} mm²
+            Pockets / holes: {pockets}
+            Unplaced: {result.Unplaced.Count}
+            """;
     }
 
     private void RecomputeSectionNumbers()
@@ -946,6 +1027,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Clipboard.SetText(row.DxfPath);
     }
 
+    private void OpenDxfFile(PartRow? row)
+    {
+        if (row == null || string.IsNullOrWhiteSpace(row.DxfPath) || !File.Exists(row.DxfPath))
+            return;
+        Process.Start(new ProcessStartInfo(row.DxfPath) { UseShellExecute = true });
+    }
+
     private void SelectAmbiguousFile(PartRow? row)
     {
         if (row == null || row.Status != PartStatus.Ambiguous) return;
@@ -980,9 +1068,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         DxfGeometryQuality quality,
         IEnumerable<DxfGeometryDiagnosticCode> diagnostics)
     {
-        var codes = diagnostics.ToList();
+        var codes = diagnostics.Distinct().ToList();
         if (codes.Count == 0)
-            return QualitySummary(quality);
+            return FormatQualitySummary(quality);
         return string.Join(Environment.NewLine, codes.Select(MapDiagnosticCode));
     }
 
@@ -994,10 +1082,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         DxfGeometryDiagnosticCode.InvalidClosedLoop => _localization["GeometryDiagnosticInvalidClosedLoop"],
         DxfGeometryDiagnosticCode.NoClosedContour => _localization["GeometryDiagnosticNoClosedContour"],
         DxfGeometryDiagnosticCode.NoUsableBounds => _localization["GeometryDiagnosticNoUsableBounds"],
+        DxfGeometryDiagnosticCode.AdditionalContoursIgnored => _localization["GeometryDiagnosticAdditionalContoursIgnored"],
+        DxfGeometryDiagnosticCode.DuplicateContourIgnored => _localization["GeometryDiagnosticDuplicateContourIgnored"],
+        DxfGeometryDiagnosticCode.SelfIntersectingContour => _localization["GeometryDiagnosticSelfIntersecting"],
         _ => code.ToString()
     };
 
-    private string QualitySummary(DxfGeometryQuality quality) => quality switch
+    private string FormatQualitySummary(DxfGeometryQuality quality) => quality switch
     {
         DxfGeometryQuality.Partial => _localization["GeometryQualityPartial"],
         DxfGeometryQuality.BoundsOnly => _localization["GeometryQualityBoundsOnly"],
@@ -1134,7 +1225,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void OpenMaterialsWindow()
     {
-        var vm = new MaterialsViewModel(Materials);
+        var vm = new MaterialsViewModel(Materials, columnWidths: MaterialsGridColumnWidths);
         var window = new NStCut.App.Views.MaterialsWindow { DataContext = vm, Owner = Application.Current.MainWindow };
         if (window.ShowDialog() == true)
         {
@@ -1144,6 +1235,42 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (ActivePasteMaterialId == null || Materials.All(m => m.Id != ActivePasteMaterialId))
                 ActivePasteMaterialId = Materials.FirstOrDefault()?.Id;
+        }
+    }
+
+    internal ReportLabels BuildReportLabels() => new(
+        _localization.ColumnDirection,
+        _localization.NoGrain,
+        _localization.GrainHorizontal,
+        _localization.GrainVertical,
+        _localization.ReportGenerated,
+        _localization.ReportMaterials,
+        _localization.ReportMaterial,
+        _localization.ReportSize,
+        _localization.ReportSheets,
+        _localization.ReportAvgUtilization,
+        _localization.ReportParts,
+        _localization.ReportPart,
+        _localization.ReportQty,
+        _localization.ReportPerimeter,
+        _localization.ReportUtilization,
+        _localization.ReportWasteArea,
+        _localization.ReportNumber,
+        _localization.ReportSizeMm,
+        _localization.ReportAreaMm2,
+        _localization.ReportAreaM2,
+        _localization.ReportSheet);
+
+    private void OpenReportSettingsWindow()
+    {
+        var vm = new ReportSettingsViewModel(Report, ExportCombinedDxf);
+        var window = new NStCut.App.Views.ReportSettingsWindow { DataContext = vm, Owner = Application.Current.MainWindow };
+        if (window.ShowDialog() == true)
+        {
+            Report = vm.Settings;
+            ExportCombinedDxf = vm.ExportCombinedDxf;
+            OnPropertyChanged(nameof(ReportFileName));
+            SaveAppSettings();
         }
     }
 
@@ -1290,18 +1417,38 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var options = CreateNestingOptions();
             options.LogFilePath = BuildNestingLogPath();
-            var materialDict = Materials.ToDictionary(m => m.Id, m => m.ToMaterial());
-            var rowReferences = Rows.Where(r => r.IsEnabled).ToList();
-            var inputs = rowReferences.Select((row, index) => new NestingInput(index, row.ToPart())).ToList();
             progress ??= new Progress<double>(v => ProgressValue = v);
 
             RecomputeOversizedForAll();
 
-            var work = await Task.Run(() => PerformNesting(options, materialDict, inputs, progress, cts.Token), cts.Token);
-
-            foreach (var update in work.Updates)
+            // Переснимаем входы и пересчитываем, если они менялись во время расчёта —
+            // иначе опубликованный результат не соответствовал бы текущему заданию.
+            const int maxAttempts = 3;
+            NestingWorkResult? work = null;
+            List<PartRow>? rowReferences = null;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                var row = rowReferences[update.RowIndex];
+                var version = _inputVersion;
+                var materialDict = Materials
+                    .GroupBy(m => m.Id)
+                    .ToDictionary(g => g.Key, g => g.First().ToMaterial());
+                var rows = Rows.Where(r => r.IsEnabled).ToList();
+                var inputs = rows.Select((row, index) => new NestingInput(index, row.ToPart())).ToList();
+
+                var candidate = await Task.Run(
+                    () => PerformNesting(options, materialDict, inputs, progress, cts.Token),
+                    cts.Token);
+                if (version == _inputVersion || attempt == maxAttempts - 1)
+                {
+                    work = candidate;
+                    rowReferences = rows;
+                    break;
+                }
+            }
+
+            foreach (var update in work!.Updates)
+            {
+                var row = rowReferences![update.RowIndex];
                 row.Bounds = update.Bounds;
                 row.Area = update.Area;
                 row.Perimeter = update.Perimeter;
@@ -1318,7 +1465,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             var result = work.Result;
             _nestingResultManager.Set(result);
-            var existingStatus = $"Sheets: {result.Sheets.Count}, unplaced: {result.Unplaced.Count}";
+            UpdateQualitySummary(result);
+            var existingStatus = $"Sheets: {result.Sheets.Count}, unplaced: {result.Unplaced.Count}" +
+                                 _localization["StatusHeuristicSuffix"];
             var simplifiedCount = work.Updates
                 .Where(update => update.GeometryQuality is DxfGeometryQuality.Partial or DxfGeometryQuality.BoundsOnly)
                 .Select(update => update.RowIndex)
@@ -1350,7 +1499,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 DataContext = new SheetPreviewViewModel(
                     result, _nestingEngine, previewOptions,
                     _dxfExport, _reportService, _exportFileNameService,
-                    OutputPath, ProjectName, parts, materials),
+                    OutputPath, ProjectName, parts, materials,
+                    Report, ExportCombinedDxf),
                 Owner = Application.Current.MainWindow
             };
             preview.Show();
@@ -1369,7 +1519,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     // (docs/Audit_Performance.md, issue P2).
     private async void ExportDxf()
     {
-        if (_nestingResultManager.Current == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        if (_nestingResultManager.Current == null) return;
+        if (string.IsNullOrWhiteSpace(OutputPath))
+        {
+            StatusText = _localization["StatusOutputFolderRequired"];
+            return;
+        }
         var outputPath = OutputPath;
         var partGapMm = PartGapMm;
         var sheetMarginMm = SheetMarginMm;
@@ -1429,7 +1584,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async void ExportReport()
     {
-        if (_nestingResultManager.Current == null || string.IsNullOrWhiteSpace(OutputPath)) return;
+        if (_nestingResultManager.Current == null) return;
+        if (string.IsNullOrWhiteSpace(OutputPath))
+        {
+            StatusText = _localization["StatusOutputFolderRequired"];
+            return;
+        }
         using var cts = new CancellationTokenSource();
         _currentCts = cts;
         IsBusy = true;
@@ -1439,17 +1599,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             var parts = Rows.Where(r => r.IsEnabled).Select(r => r.ToPart()).ToList();
             var sheets = _nestingResultManager.Current.Sheets;
-            var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s)).ToList();
+            var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s, showPartNumbers: true)).ToList();
 
-            var path = _exportFileNameService.GetReportExportPath(OutputPath);
+            var path = string.IsNullOrWhiteSpace(Report.FileName)
+                ? _exportFileNameService.GetReportExportPath(OutputPath)
+                : Path.Combine(OutputPath, Formatters.ReportFileNameFormatter.Format(Report, DateTime.Now));
             var materials = Materials.Select(m => m.ToMaterial()).ToList();
-            var reportLabels = new ReportLabels(
-                _localization.ColumnDirection,
-                _localization.NoGrain,
-                _localization.GrainHorizontal,
-                _localization.GrainVertical);
+            var reportLabels = BuildReportLabels();
+            var reportOptions = new ReportContentOptions(
+                Report.Title,
+                Report.TitleIncludeDate,
+                Report.TitleIncludeTime,
+                Report.ShowSummary,
+                Report.IncludeMaterial,
+                Report.ShowPartNames,
+                Report.ShowArea,
+                Report.AreaUnit == Models.ReportAreaUnit.SquareM);
             await Task.Run(() =>
-                _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels, cts.Token), cts.Token);
+                _reportService.GenerateReport(path, ProjectName, parts, materials, sheets, thumbnails, reportLabels, reportOptions, cts.Token), cts.Token);
             _nestingResultManager.SetLastReportPath(path);
             StatusText = $"Report saved: {path}";
         }
@@ -1523,8 +1690,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     internal void OpenProject(string path)
     {
+        if (!_projectService.TryLoad(path, out var data))
+        {
+            MessageBox.Show(
+                _localization["ErrorProjectFileCorrupted"],
+                _localization.ErrorTitleOpen,
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
         PushUndoSnapshot();
-        var data = _projectService.Load(path);
         if (!string.IsNullOrWhiteSpace(data.SearchPath)) SearchPath = data.SearchPath;
         if (!string.IsNullOrWhiteSpace(data.OutputPath)) OutputPath = data.OutputPath;
         _suspendRecompute = true;
@@ -1559,6 +1735,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ThemeService.Apply(parsed);
     }
 
+    private void ShowAbout()
+    {
+        var window = new Views.AboutWindow { Owner = Application.Current.MainWindow };
+        window.ShowDialog();
+    }
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
@@ -1568,6 +1750,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             PartGapMm = PartGapMm,
             SheetMarginMm = SheetMarginMm,
+            AllowMarginRelax = AllowMarginRelax,
             MaxSearchPasses = MaxSearchPasses,
             NoImprovementStopCount = NoImprovementStopCount,
             AcceptableMaxUnplaced = AcceptableMaxUnplaced,

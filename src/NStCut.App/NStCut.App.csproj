@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <Resource Include="..\..\nstcut_logo.png" Link="nstcut_logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NStCut.Core\NStCut.Core.csproj" />
     <ProjectReference Include="..\NStCut.Dxf\NStCut.Dxf.csproj" />
     <ProjectReference Include="..\NStCut.Nesting\NStCut.Nesting.csproj" />
@@ -21,6 +25,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>nstcut.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>N.StCut</Product>
+    <Company>Nikolay Sukhomlin</Company>
+    <Copyright>Copyright © 2026 Nikolay Sukhomlin</Copyright>
+    <Description>Automatic sheet nesting of DXF flat patterns</Description>
   </PropertyGroup>
 
 </Project>

@@ -4,19 +4,50 @@ using NStCut.Core.Models;
 
 namespace NStCut.App.Services;
 
-public sealed class FileResolveService
+public sealed class FileResolveService : IFileResolveService
 {
-    public IReadOnlyList<string> GetCandidates(string partName, string searchPath)
+    /// <summary>
+    /// Ищет DXF-файлы, соответствующие имени детали, в папке поиска.
+    /// </summary>
+    /// <param name="partName">Отображаемое имя детали ("Номер Название").</param>
+    /// <param name="searchPath">Папка поиска (рекурсивно).</param>
+    /// <param name="excludePath">
+    /// Папка, которую нужно исключить из поиска (обычно — папка сохранения/экспорта проекта).
+    /// Если она вложена в <paramref name="searchPath"/> или совпадает с ней, ранее экспортированные
+    /// файлы не будут попадать в кандидаты и приводить к ложному статусу Ambiguous.
+    /// </param>
+    public IReadOnlyList<string> GetCandidates(string partName, string searchPath, string? excludePath = null)
     {
         if (!Directory.Exists(searchPath) || string.IsNullOrWhiteSpace(partName))
             return Array.Empty<string>();
 
+        return GetCandidates(partName, EnumerateDxfFiles(searchPath, excludePath));
+    }
+
+    /// <summary>
+    /// Перечисляет все DXF-файлы в папке поиска один раз (за вычетом <paramref name="excludePath"/>).
+    /// Используется при пакетном разрешении статуса для всех строк таблицы (см. MainViewModel.FindFiles),
+    /// чтобы не сканировать диск заново на каждую деталь (docs/Audit_Performance.md, issue P1).
+    /// </summary>
+    public IReadOnlyList<string> EnumerateDxfFiles(string searchPath, string? excludePath = null)
+    {
+        if (!Directory.Exists(searchPath))
+            return Array.Empty<string>();
+
+        return Directory
+            .EnumerateFiles(searchPath, "*.dxf", SearchOption.AllDirectories)
+            .Where(path => !IsUnderExcludedPath(path, excludePath))
+            .ToList();
+    }
+
+    /// <summary>Вариант GetCandidates, принимающий уже перечисленный список файлов (без повторного сканирования диска).</summary>
+    public IReadOnlyList<string> GetCandidates(string partName, IReadOnlyList<string> allFiles)
+    {
+        if (string.IsNullOrWhiteSpace(partName))
+            return Array.Empty<string>();
+
         var expectedFull = NameNormalizer.Normalize(partName);
         var expectedPrefix = NameNormalizer.FirstToken(partName);
-
-        var allFiles = Directory
-            .EnumerateFiles(searchPath, "*.dxf", SearchOption.AllDirectories)
-            .ToList();
 
         // 1) exact normalized match
         var candidates = allFiles
@@ -38,15 +69,29 @@ public sealed class FileResolveService
         return candidates;
     }
 
-    public ResolveResult Resolve(string partName, string searchPath)
+    public ResolveResult Resolve(string partName, string searchPath, string? excludePath = null)
+        => ToResult(GetCandidates(partName, searchPath, excludePath));
+
+    /// <summary>Вариант Resolve, принимающий уже перечисленный список файлов (без повторного сканирования диска).</summary>
+    public ResolveResult Resolve(string partName, IReadOnlyList<string> allFiles)
+        => ToResult(GetCandidates(partName, allFiles));
+
+    private static ResolveResult ToResult(IReadOnlyList<string> candidates) => candidates.Count switch
     {
-        var candidates = GetCandidates(partName, searchPath);
-        return candidates.Count switch
-        {
-            0 => new ResolveResult(PartStatus.NotFound, string.Empty, candidates),
-            1 => new ResolveResult(PartStatus.Found, candidates[0], candidates),
-            _ => new ResolveResult(PartStatus.Ambiguous, string.Empty, candidates)
-        };
+        0 => new ResolveResult(PartStatus.NotFound, string.Empty, candidates),
+        1 => new ResolveResult(PartStatus.Found, candidates[0], candidates),
+        _ => new ResolveResult(PartStatus.Ambiguous, string.Empty, candidates)
+    };
+
+    private static bool IsUnderExcludedPath(string filePath, string? excludePath)
+    {
+        if (string.IsNullOrWhiteSpace(excludePath) || !Directory.Exists(excludePath))
+            return false;
+
+        var fullFile = Path.GetFullPath(filePath);
+        var fullExclude = Path.GetFullPath(excludePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullFile.StartsWith(fullExclude + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fullFile, fullExclude, StringComparison.OrdinalIgnoreCase);
     }
 }
 

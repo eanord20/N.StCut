@@ -25,6 +25,7 @@ public sealed class ReportService : IReportService
         IReadOnlyList<SheetInstance> sheets,
         IReadOnlyList<byte[]> sheetThumbnails,
         ReportLabels? labels = null,
+        ReportContentOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -34,85 +35,147 @@ public sealed class ReportService : IReportService
         doc.SetDefaultFont(new Xceed.Document.NET.Font(ReportFontFamily));
 
         var materialNames = materials.ToDictionary(m => m.Id, m => m.Name);
+        var showSummary = options?.ShowSummary ?? true;
+        var includeMaterial = options?.IncludeMaterial ?? true;
+        var showPartNames = options?.ShowPartNames ?? true;
+        var showArea = options?.ShowArea ?? true;
+        var areaScale = options?.AreaInSquareMeters == true ? 1e-6 : 1.0;
+        var areaFormat = options?.AreaInSquareMeters == true ? "F3" : "F1";
+        var areaHeader = options?.AreaInSquareMeters == true
+            ? (labels?.AreaM2Header ?? "Area, m²")
+            : (labels?.AreaMm2Header ?? "Area, mm²");
+        string AreaText(double v) => (v * areaScale).ToString(areaFormat);
 
-        doc.InsertParagraph(projectName)
+        doc.InsertParagraph(string.IsNullOrWhiteSpace(options?.Title) ? projectName : options!.Title)
            .Bold()
            .FontSize(18)
            .Alignment = Alignment.center;
 
-        doc.InsertParagraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}")
-           .FontSize(10)
-           .Alignment = Alignment.center;
-
-        doc.InsertParagraph();
-
-        // Materials summary
-        doc.InsertParagraph("Materials").Bold().FontSize(14);
-        var materialTable = doc.AddTable(sheets.GroupBy(s => s.Material.Id).Count() + 1, 4);
-        materialTable.Design = TableDesign.TableGrid;
-        materialTable.Rows[0].Cells[0].Paragraphs[0].Append("Material").Bold();
-        materialTable.Rows[0].Cells[1].Paragraphs[0].Append("Size").Bold();
-        materialTable.Rows[0].Cells[2].Paragraphs[0].Append("Sheets").Bold();
-        materialTable.Rows[0].Cells[3].Paragraphs[0].Append("Avg. utilization %").Bold();
-
-        int row = 1;
-        foreach (var g in sheets.GroupBy(s => s.Material.Id).OrderBy(g => g.First().Material.Name))
+        var stamp = string.Join(" ", new[]
         {
-            materialTable.Rows[row].Cells[0].Paragraphs[0].Append(g.First().Material.Name);
-            materialTable.Rows[row].Cells[1].Paragraphs[0].Append($"{g.First().Material.Length} x {g.First().Material.Width}");
-            materialTable.Rows[row].Cells[2].Paragraphs[0].Append(g.Count().ToString());
-            materialTable.Rows[row].Cells[3].Paragraphs[0].Append($"{g.Average(s => s.UtilizationPercent):F1}");
-            row++;
-        }
-        doc.InsertTable(materialTable);
+            options is null || options.TitleIncludeDate ? DateTime.Now.ToString("yyyy-MM-dd") : null,
+            options is null || options.TitleIncludeTime ? DateTime.Now.ToString("HH:mm") : null
+        }.Where(v => v != null));
+        if (stamp.Length > 0)
+            doc.InsertParagraph($"{labels?.Generated ?? "Generated"}: {stamp}").FontSize(10).Alignment = Alignment.center;
+
         doc.InsertParagraph();
 
-        // Parts table
-        doc.InsertParagraph("Parts").Bold().FontSize(14);
-        var partTable = doc.AddTable(parts.Count + 1, 5);
-        partTable.Design = TableDesign.TableGrid;
-        partTable.Rows[0].Cells[0].Paragraphs[0].Append("Part").Bold();
-        partTable.Rows[0].Cells[1].Paragraphs[0].Append("Material").Bold();
-        partTable.Rows[0].Cells[2].Paragraphs[0].Append("Qty").Bold();
-        partTable.Rows[0].Cells[3].Paragraphs[0].Append("Area, mm²").Bold();
-        partTable.Rows[0].Cells[4].Paragraphs[0].Append("Perimeter, mm").Bold();
-
-        for (int i = 0; i < parts.Count; i++)
+        if (showSummary)
         {
-            var materialName = materialNames.TryGetValue(parts[i].MaterialId, out var name) ? name : parts[i].MaterialId;
-            partTable.Rows[i + 1].Cells[0].Paragraphs[0].Append(parts[i].DisplayName);
-            partTable.Rows[i + 1].Cells[1].Paragraphs[0].Append(materialName);
-            partTable.Rows[i + 1].Cells[2].Paragraphs[0].Append(parts[i].Quantity.ToString());
-            partTable.Rows[i + 1].Cells[3].Paragraphs[0].Append(parts[i].TrueArea.ToString("F1"));
-            partTable.Rows[i + 1].Cells[4].Paragraphs[0].Append(parts[i].TruePerimeter.ToString("F1"));
+            // Materials summary
+            doc.InsertParagraph(labels?.MaterialsHeader ?? "Materials").Bold().FontSize(14);
+            var materialTable = doc.AddTable(sheets.GroupBy(s => s.Material.Id).Count() + 1, 4);
+            materialTable.Design = TableDesign.TableGrid;
+            materialTable.Rows[0].Cells[0].Paragraphs[0].Append(labels?.MaterialHeader ?? "Material").Bold();
+            materialTable.Rows[0].Cells[1].Paragraphs[0].Append(labels?.SizeHeader ?? "Size").Bold();
+            materialTable.Rows[0].Cells[2].Paragraphs[0].Append(labels?.SheetsHeader ?? "Sheets").Bold();
+            materialTable.Rows[0].Cells[3].Paragraphs[0].Append(labels?.AvgUtilizationHeader ?? "Avg. utilization %").Bold();
+
+            int row = 1;
+            foreach (var g in sheets.GroupBy(s => s.Material.Id).OrderBy(g => g.First().Material.Name))
+            {
+                materialTable.Rows[row].Cells[0].Paragraphs[0].Append(g.First().Material.Name);
+                var mat = g.First().Material;
+                var size = mat.Thickness is double t
+                    ? $"{mat.Length} x {mat.Width} x {t}"
+                    : $"{mat.Length} x {mat.Width}";
+                materialTable.Rows[row].Cells[1].Paragraphs[0].Append(size);
+                materialTable.Rows[row].Cells[2].Paragraphs[0].Append(g.Count().ToString());
+                materialTable.Rows[row].Cells[3].Paragraphs[0].Append($"{g.Average(s => s.UtilizationPercent):F1}");
+                row++;
+            }
+            doc.InsertTable(materialTable);
+            doc.InsertParagraph();
+
+            // Parts table
+            doc.InsertParagraph(labels?.PartsHeader ?? "Parts").Bold().FontSize(14);
+            var partCols = showArea ? 6 : 5;
+            var partTable = doc.AddTable(parts.Count + 1, partCols);
+            partTable.Design = TableDesign.TableGrid;
+            partTable.Rows[0].Cells[0].Paragraphs[0].Append(labels?.PartHeader ?? "Part").Bold();
+            partTable.Rows[0].Cells[1].Paragraphs[0].Append(labels?.MaterialHeader ?? "Material").Bold();
+            partTable.Rows[0].Cells[2].Paragraphs[0].Append(labels?.QtyHeader ?? "Qty").Bold();
+            partTable.Rows[0].Cells[3].Paragraphs[0].Append(labels?.SizeMmHeader ?? "Size, mm").Bold();
+            partTable.Rows[0].Cells[4].Paragraphs[0].Append(showArea ? areaHeader : (labels?.PerimeterHeader ?? "Perimeter, mm")).Bold();
+            if (showArea)
+                partTable.Rows[0].Cells[5].Paragraphs[0].Append(labels?.PerimeterHeader ?? "Perimeter, mm").Bold();
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var materialName = includeMaterial && materialNames.TryGetValue(parts[i].MaterialId, out var name)
+                    ? name
+                    : string.Empty;
+                partTable.Rows[i + 1].Cells[0].Paragraphs[0].Append(showPartNames ? parts[i].DisplayName : parts[i].Number);
+                partTable.Rows[i + 1].Cells[1].Paragraphs[0].Append(materialName);
+                partTable.Rows[i + 1].Cells[2].Paragraphs[0].Append(parts[i].Quantity.ToString());
+                partTable.Rows[i + 1].Cells[3].Paragraphs[0].Append($"{parts[i].Bounds.Width:F1} x {parts[i].Bounds.Height:F1}");
+                var c = 4;
+                if (showArea)
+                    partTable.Rows[i + 1].Cells[c++].Paragraphs[0].Append(AreaText(parts[i].TrueArea));
+                partTable.Rows[i + 1].Cells[c].Paragraphs[0].Append(parts[i].TruePerimeter.ToString("F1"));
+            }
+            doc.InsertTable(partTable);
+            doc.InsertParagraph();
         }
-        doc.InsertTable(partTable);
-        doc.InsertParagraph();
 
         // Sheets table + thumbnails
-        doc.InsertParagraph("Sheets").Bold().FontSize(14);
-        var sheetTable = doc.AddTable(sheets.Count + 1, 5);
+        doc.InsertParagraph(labels?.SheetsHeader ?? "Sheets").Bold().FontSize(14);
+        var sheetCols = showArea ? 5 : 4;
+        var sheetTable = doc.AddTable(sheets.Count + 1, sheetCols);
         sheetTable.Design = TableDesign.TableGrid;
         sheetTable.Rows[0].Cells[0].Paragraphs[0].Append("#").Bold();
-        sheetTable.Rows[0].Cells[1].Paragraphs[0].Append("Material").Bold();
-        sheetTable.Rows[0].Cells[2].Paragraphs[0].Append("Utilization %").Bold();
-        sheetTable.Rows[0].Cells[3].Paragraphs[0].Append("Waste area, mm²").Bold();
-        sheetTable.Rows[0].Cells[4].Paragraphs[0].Append(labels?.DirectionHeader ?? DefaultDirectionHeader).Bold();
+        sheetTable.Rows[0].Cells[1].Paragraphs[0].Append(labels?.MaterialHeader ?? "Material").Bold();
+        sheetTable.Rows[0].Cells[2].Paragraphs[0].Append(labels?.UtilizationHeader ?? "Utilization %").Bold();
+        var sc = 3;
+        if (showArea)
+            sheetTable.Rows[0].Cells[sc++].Paragraphs[0].Append(labels?.WasteAreaHeader ?? "Waste area").Bold();
+        sheetTable.Rows[0].Cells[sc].Paragraphs[0].Append(labels?.DirectionHeader ?? DefaultDirectionHeader).Bold();
 
         for (int i = 0; i < sheets.Count; i++)
         {
             sheetTable.Rows[i + 1].Cells[0].Paragraphs[0].Append(sheets[i].Index.ToString());
-            sheetTable.Rows[i + 1].Cells[1].Paragraphs[0].Append(sheets[i].Material.Name);
+            sheetTable.Rows[i + 1].Cells[1].Paragraphs[0].Append(includeMaterial ? sheets[i].Material.Name : string.Empty);
             sheetTable.Rows[i + 1].Cells[2].Paragraphs[0].Append($"{sheets[i].UtilizationPercent:F1}");
-            sheetTable.Rows[i + 1].Cells[3].Paragraphs[0].Append($"{sheets[i].WasteArea:F1}");
-            sheetTable.Rows[i + 1].Cells[4].Paragraphs[0].Append(GetDirectionLabel(sheets[i], labels));
+            var cc = 3;
+            if (showArea)
+                sheetTable.Rows[i + 1].Cells[cc++].Paragraphs[0].Append(AreaText(sheets[i].WasteArea));
+            sheetTable.Rows[i + 1].Cells[cc].Paragraphs[0].Append(GetDirectionLabel(sheets[i], labels));
         }
         doc.InsertTable(sheetTable);
         doc.InsertParagraph();
 
         for (int i = 0; i < sheets.Count && i < sheetThumbnails.Count; i++)
         {
-            doc.InsertParagraph($"Sheet {sheets[i].Index} — {sheets[i].Material.Name}").Bold();
+            var sheet = sheets[i];
+            doc.InsertParagraph($"{labels?.SheetLabel ?? "Sheet"} {sheet.Index} — {sheet.Material.Name}").Bold();
+
+            var numbers = SheetPartNumbering.Build(sheet);
+            var groups = sheet.Parts
+                .GroupBy(p => p.Source)
+                .OrderBy(g => numbers[g.Key])
+                .ToList();
+            var sheetPartTable = doc.AddTable(groups.Count + 1, 5);
+            sheetPartTable.Design = TableDesign.TableGrid;
+            sheetPartTable.Rows[0].Cells[0].Paragraphs[0].Append("№").Bold();
+            sheetPartTable.Rows[0].Cells[1].Paragraphs[0].Append(labels?.PartHeader ?? "Part").Bold();
+            sheetPartTable.Rows[0].Cells[2].Paragraphs[0].Append(labels?.NumberHeader ?? "Number").Bold();
+            sheetPartTable.Rows[0].Cells[3].Paragraphs[0].Append(labels?.QtyHeader ?? "Qty").Bold();
+            sheetPartTable.Rows[0].Cells[4].Paragraphs[0].Append(labels?.SizeMmHeader ?? "Size, mm").Bold();
+            var r = 1;
+            foreach (var g in groups)
+            {
+                var part = g.Key;
+                sheetPartTable.Rows[r].Cells[0].Paragraphs[0].Append(numbers[part].ToString());
+                sheetPartTable.Rows[r].Cells[1].Paragraphs[0].Append(showPartNames ? part.DisplayName : part.Number);
+                sheetPartTable.Rows[r].Cells[2].Paragraphs[0].Append(part.Number);
+                sheetPartTable.Rows[r].Cells[3].Paragraphs[0].Append(g.Count().ToString());
+                sheetPartTable.Rows[r].Cells[4].Paragraphs[0].Append($"{part.Bounds.Width:F1} x {part.Bounds.Height:F1}");
+                r++;
+            }
+            doc.InsertTable(sheetPartTable);
+            doc.InsertParagraph();
+
             AddThumbnail(doc, sheetThumbnails[i]);
             doc.InsertParagraph();
         }

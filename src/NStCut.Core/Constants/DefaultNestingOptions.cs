@@ -15,6 +15,7 @@ public static class DefaultNestingOptions
         AcceptableMaxSheets = AppConstants.DefaultAcceptableMaxSheets,
         PlacementHeuristic = AppConstants.DefaultPlacementHeuristic,
         OrientationPreference = AppConstants.DefaultOrientationPreference,
-        PackStrategyIndex = AppConstants.DefaultPackStrategyIndex
+        PackStrategyIndex = AppConstants.DefaultPackStrategyIndex,
+        EnableGapFilling = AppConstants.DefaultEnableGapFilling
     };
 }

@@ -13,6 +13,15 @@
         TextElement.Foreground="{DynamicResource MaterialDesignBody}">
     <Window.Resources>
         <converters:LocalizedFormatMultiValueConverter x:Key="LocalizedFormatConverter" />
+        <!-- Темизированный ToolTip — системный нечитаем на тёмной теме -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="{DynamicResource MaterialDesignCardBackground}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource MaterialDesignBody}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="MaxWidth" Value="420" />
+        </Style>
     </Window.Resources>
     <Grid Margin="8">
         <Grid.RowDefinitions>
@@ -33,7 +42,7 @@
                     <materialDesign:PackIcon Kind="FileExport" Width="24" Height="24" />
                 </Button>
                 <Button Command="{Binding ExportReportCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonExportReport}" Margin="0,0,4,0">
-                    <materialDesign:PackIcon Kind="FilePdfBox" Width="24" Height="24" />
+                    <materialDesign:PackIcon Kind="FileWordBox" Width="24" Height="24" />
                 </Button>
                 <Button Command="{Binding OpenDxfCommand}" ToolTip="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ButtonOpenDxfFolder}" Margin="0,0,4,0">
                     <materialDesign:PackIcon Kind="FolderOpenOutline" Width="24" Height="24" />
@@ -68,6 +77,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Margin="0,0,0,8">
                             <TextBlock.Text>
@@ -99,8 +109,15 @@
                                     </ItemsControl.ItemContainerStyle>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Canvas Width="{Binding Width}" Height="{Binding Height}">
+                                            <Grid Width="{Binding Width}" Height="{Binding Height}">
                                                 <Rectangle Width="{Binding Width}" Height="{Binding Height}" Stroke="{DynamicResource SheetPreviewPartStrokeBrush}" Fill="{DynamicResource SheetPreviewPartFillBrush}" StrokeThickness="0.5" Cursor="Hand" MouseLeftButtonDown="OnPartMouseLeftButtonDown" MouseMove="OnPartMouseMove" MouseLeftButtonUp="OnPartMouseLeftButtonUp" MouseRightButtonDown="OnPartMouseRightButtonDown" />
+                                                <TextBlock Text="{Binding DisplayIndex}" Foreground="Black" IsHitTestVisible="False"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           FontSize="{Binding DataContext.PartLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                    <TextBlock.LayoutTransform>
+                                                        <ScaleTransform ScaleX="{Binding DataContext.ZoomInverse, RelativeSource={RelativeSource AncestorType=Window}}" ScaleY="{Binding DataContext.ZoomInverse, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                                    </TextBlock.LayoutTransform>
+                                                </TextBlock>
                                                 <Path Data="{Binding ContourGeometry}" Stroke="{DynamicResource SheetPreviewPartStrokeBrush}" StrokeThickness="0.2" Fill="Transparent" IsHitTestVisible="False">
                                                     <Path.Style>
                                                         <Style TargetType="Path">
@@ -113,7 +130,7 @@
                                                         </Style>
                                                     </Path.Style>
                                                 </Path>
-                                            </Canvas>
+                                            </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -136,7 +153,9 @@
                         </ScrollViewer>
                         <DataGrid Grid.Row="2" ItemsSource="{Binding Parts}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,4,0,0" MaxHeight="200">
                             <DataGrid.Columns>
+                                <DataGridTextColumn Header="№" Binding="{Binding DisplayIndex}" />
                                 <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnNumber}" Binding="{Binding Source.Source.Number}" />
+                                <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnName}" Binding="{Binding Source.Source.DisplayName}" />
                                 <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnCopy}" Binding="{Binding Source.CopyIndex}" />
                                 <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnRotation}" Binding="{Binding Source.Rotation, StringFormat='{}{0:F1}'}" />
                                 <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnX}" Binding="{Binding Source.Position.X, StringFormat='{}{0:F1}'}" />
@@ -145,6 +164,8 @@
                                 <DataGridTextColumn Header="{Binding Source={x:Static loc:LocalizationService.Instance}, Path=ColumnH}" Binding="{Binding Source.Bounds.Height, StringFormat='{}{0:F1}'}" />
                             </DataGrid.Columns>
                         </DataGrid>
+                        <TextBlock Grid.Row="3" Text="{Binding QualityText}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource MaterialDesignBody}" FontSize="12" Margin="0,4,0,0" />
                     </Grid>
                 </DataTemplate>
             </TabControl.ContentTemplate>

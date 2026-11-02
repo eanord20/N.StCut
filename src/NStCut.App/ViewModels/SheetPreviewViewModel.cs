@@ -3,10 +3,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows.Input;
 using NStCut.App.Commands;
+using NStCut.App.Models;
 using NStCut.App.Services;
 using NStCut.Core.Constants;
 using NStCut.Core.Contracts;
@@ -31,8 +33,16 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
         {
             _zoom = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ZoomInverse));
+            OnPropertyChanged(nameof(PartLabelFontSize));
         }
     }
+
+    /// <summary>Обратный масштаб — чтобы подписи номеров деталей держали читаемый размер при любом зуме.</summary>
+    public double ZoomInverse => _zoom > 0 ? 1.0 / _zoom : 1.0;
+
+    /// <summary>Размер подписи номера детали с учётом контр-масштаба (читаемо при любом зуме).</summary>
+    public double PartLabelFontSize => 16.0 * ZoomInverse;
 
     public SheetPreviewItemViewModel? SelectedSheet
     {
@@ -75,12 +85,17 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
     private readonly string _projectName;
     private readonly IReadOnlyList<Part> _parts;
     private readonly IReadOnlyList<SheetMaterial> _materials;
+    private readonly ReportSettings? _reportSettings;
+    private readonly bool _exportCombinedDxf;
     private string? _lastReportPath;
 
     public SheetPreviewViewModel(NestingResult result, INestingEngine? nestingEngine = null, NestingOptions? options = null,
         IDxfExportService? dxfExport = null, IReportService? reportService = null, IExportFileNameService? exportFileNameService = null,
-        string? outputPath = null, string? projectName = null, IReadOnlyList<Part>? parts = null, IReadOnlyList<SheetMaterial>? materials = null)
+        string? outputPath = null, string? projectName = null, IReadOnlyList<Part>? parts = null, IReadOnlyList<SheetMaterial>? materials = null,
+        ReportSettings? reportSettings = null, bool exportCombinedDxf = false)
     {
+        _reportSettings = reportSettings;
+        _exportCombinedDxf = exportCombinedDxf;
         _originalResult = result;
         _nestingEngine = nestingEngine;
         _options = options;
@@ -200,10 +215,19 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
             await Task.Run(() =>
             {
                 var batchTimestamp = _exportFileNameService.GetBatchTimestamp();
-                var exports = sheets.Select(sheet =>
-                    (_exportFileNameService.GetDxfExportPath(outputPath, sheet, batchTimestamp), sheet)).ToList();
-                _dxfExport.WriteSheets(exports, partGapMm, sheetMarginMm, labels);
-                exportedCount = exports.Count;
+                if (_exportCombinedDxf)
+                {
+                    var path = _exportFileNameService.GetCombinedDxfExportPath(outputPath, batchTimestamp);
+                    _dxfExport.WriteCombined(path, sheets, partGapMm, sheetMarginMm, labels);
+                    exportedCount = 1;
+                }
+                else
+                {
+                    var exports = sheets.Select(sheet =>
+                        (_exportFileNameService.GetDxfExportPath(outputPath, sheet, batchTimestamp), sheet)).ToList();
+                    _dxfExport.WriteSheets(exports, partGapMm, sheetMarginMm, labels);
+                    exportedCount = exports.Count;
+                }
             });
         }
         catch (Exception ex)
@@ -222,17 +246,46 @@ public sealed class SheetPreviewViewModel : INotifyPropertyChanged
             Directory.CreateDirectory(_outputPath);
 
             var sheets = _originalResult.Sheets;
-            var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s)).ToList();
-            var path = _exportFileNameService.GetReportExportPath(_outputPath);
+            var thumbnails = sheets.Select(s => SheetThumbnailService.Render(s, showPartNumbers: true)).ToList();
+            var settings = _reportSettings;
+            var path = settings is null || string.IsNullOrWhiteSpace(settings.FileName)
+                ? _exportFileNameService.GetReportExportPath(_outputPath)
+                : Path.Combine(_outputPath, Formatters.ReportFileNameFormatter.Format(settings, DateTime.Now));
             var localization = LocalizationService.Instance;
             var reportLabels = new ReportLabels(
                 localization.ColumnDirection,
                 localization.NoGrain,
                 localization.GrainHorizontal,
-                localization.GrainVertical);
+                localization.GrainVertical,
+                localization.ReportGenerated,
+                localization.ReportMaterials,
+                localization.ReportMaterial,
+                localization.ReportSize,
+                localization.ReportSheets,
+                localization.ReportAvgUtilization,
+                localization.ReportParts,
+                localization.ReportPart,
+                localization.ReportQty,
+                localization.ReportPerimeter,
+                localization.ReportUtilization,
+                localization.ReportWasteArea,
+                localization.ReportNumber,
+                localization.ReportSizeMm,
+                localization.ReportAreaMm2,
+                localization.ReportAreaM2,
+                localization.ReportSheet);
+            var reportOptions = settings is null ? null : new ReportContentOptions(
+                settings.Title,
+                settings.TitleIncludeDate,
+                settings.TitleIncludeTime,
+                settings.ShowSummary,
+                settings.IncludeMaterial,
+                settings.ShowPartNames,
+                settings.ShowArea,
+                settings.AreaUnit == Models.ReportAreaUnit.SquareM);
 
             await Task.Run(() =>
-                _reportService.GenerateReport(path, _projectName, _parts, _materials, sheets, thumbnails, reportLabels));
+                _reportService.GenerateReport(path, _projectName, _parts, _materials, sheets, thumbnails, reportLabels, reportOptions));
             _lastReportPath = path;
             ((RelayCommand)OpenReportCommand).RaiseCanExecuteChanged();
         }
@@ -307,6 +360,7 @@ public sealed class SheetPreviewItemViewModel
     public bool HasGrain => Material.HasGrain;
     public string DirectionText { get; }
     public string ArrowGeometry { get; }
+    public string QualityText { get; }
 
     public SheetPreviewItemViewModel(SheetInstance sheet, NestingOptions? options = null)
     {
@@ -314,9 +368,11 @@ public sealed class SheetPreviewItemViewModel
         _partGap = options?.PartGapMm ?? 0.0;
         _sheetMargin = options?.SheetMarginMm ?? 0.0;
         _snapThreshold = AppConstants.PreviewSnapThresholdMm;
+        var partNumbers = SheetPartNumbering.Build(sheet);
         Parts = new ObservableCollection<PreviewPartViewModel>(
             sheet.Parts.Select(p => new PreviewPartViewModel(p.Bounds.Left,
-                sheet.Material.Width - p.Bounds.Top, p.Bounds.Width, p.Bounds.Height) { Source = p }));
+                sheet.Material.Width - p.Bounds.Top, p.Bounds.Width, p.Bounds.Height)
+            { Source = p, DisplayIndex = partNumbers.TryGetValue(p.Source, out var n) ? n : 0 }));
         var localization = LocalizationService.Instance;
         DirectionText = !Material.HasGrain ? localization.NoGrain :
             Material.GrainDirection == GrainDirection.Horizontal ? localization.GrainHorizontal : localization.GrainVertical;
@@ -324,6 +380,7 @@ public sealed class SheetPreviewItemViewModel
         if (!Material.HasGrain)
         {
             ArrowGeometry = string.Empty;
+            QualityText = string.Empty;
             return;
         }
 
@@ -349,6 +406,30 @@ public sealed class SheetPreviewItemViewModel
             CultureInfo.InvariantCulture,
             "M {0:F6},{1:F6} L {2:F6},{3:F6} M {2:F6},{3:F6} L {4:F6},{5:F6} M {2:F6},{3:F6} L {6:F6},{7:F6}",
             start.X, start.Y, end.X, end.Y, head1.X, head1.Y, head2.X, head2.Y);
+
+        var cutLength = sheet.Parts.Sum(p => p.Source is null
+            ? 2.0 * (p.Bounds.Width + p.Bounds.Height)
+            : p.Source.TruePerimeter);
+        var residualArea = sheet.Pockets.Count > 0
+            ? sheet.Pockets.Sum(p => p.Area)
+            : sheet.FreeRectangles.Sum(r => r.Area);
+        var pocketCount = sheet.Pockets.Count;
+        Rect? largestPocket = null;
+        if (sheet.Pockets.Count > 0)
+            largestPocket = sheet.Pockets.MaxBy(p => p.Area)?.LargestInscribedRectangle;
+        else if (sheet.FreeRectangles.Count > 0)
+            largestPocket = sheet.FreeRectangles.MaxBy(r => r.Area);
+        var longThin = sheet.Pockets.Count(p => p.IsLongThin);
+        var deep = sheet.Pockets.Count(p => p.IsDeepPocket);
+
+        QualityText = $"""
+            Utilization: {sheet.UtilizationPercent:F2}%
+            Cut length: {cutLength:F0} mm
+            Residual area: {residualArea:F0} mm²
+            Pockets / holes: {pocketCount}
+            Largest residual: {(largestPocket is null ? "-" : $"{largestPocket.Value.Width:F1} × {largestPocket.Value.Height:F1} mm")}
+            Long thin: {longThin}, deep: {deep}
+            """;
     }
 
     public (double Left, double Top) SnapToNearest(PreviewPartViewModel part, double newLeft, double newTop)
@@ -593,6 +674,7 @@ public sealed class PreviewPartViewModel : INotifyPropertyChanged
 
     public string? ContourGeometry { get; private set; }
     public bool HasContour { get; private set; }
+    public int DisplayIndex { get; set; }
 
     public PreviewPartViewModel(double left, double top, double width, double height)
     {
@@ -635,12 +717,9 @@ public sealed class PreviewPartViewModel : INotifyPropertyChanged
             double px, py;
             if (isRotated)
             {
-                var cx = originalBounds.Width / 2.0;
-                var cy = originalBounds.Height / 2.0;
-                var rx = cx - (ly - cy);
-                var ry = cy + (lx - cx);
-                px = rx;
-                py = placedBounds.Height - ry;
+                // CCW-90° в локальных координатах: (x,y) -> (H-y, x); отражаем Y для экрана.
+                px = originalBounds.Height - ly;
+                py = placedBounds.Height - lx;
             }
             else
             {

@@ -8,8 +8,8 @@ namespace NStCut.Nesting.Internals;
 /// </summary>
 internal static class StableHash
 {
-    private const ulong FnvOffsetBasis = 14695981039346656037;
-    private const ulong FnvPrime = 1099511628211;
+    internal const ulong FnvOffsetBasis = 14695981039346656037;
+    internal const ulong FnvPrime = 1099511628211;
 
     public static long Compute(IReadOnlyList<Part> parts, IReadOnlyList<SheetMaterial> materials, NestingOptions options)
     {
@@ -50,7 +50,7 @@ internal static class StableHash
         return (long)hash;
     }
 
-    private static ulong Add(ulong hash, string value)
+    internal static ulong Add(ulong hash, string value)
     {
         hash = Add(hash, value.Length);
         foreach (var c in value)
@@ -58,24 +58,24 @@ internal static class StableHash
         return hash;
     }
 
-    private static ulong Add(ulong hash, int value)
+    internal static ulong Add(ulong hash, int value)
     {
         hash ^= (ulong)value;
         return unchecked(hash * FnvPrime);
     }
 
-    private static ulong Add(ulong hash, long value)
+    internal static ulong Add(ulong hash, long value)
     {
         hash ^= (ulong)value;
         return unchecked(hash * FnvPrime);
     }
 
-    private static ulong Add(ulong hash, double value)
+    internal static ulong Add(ulong hash, double value)
         => Add(hash, BitConverter.DoubleToInt64Bits(value));
 
-    private static ulong Add(ulong hash, char value)
+    internal static ulong Add(ulong hash, char value)
         => Add(hash, (int)value);
 
-    private static ulong Add(ulong hash, bool value)
+    internal static ulong Add(ulong hash, bool value)
         => Add(hash, value ? 1 : 0);
 }
