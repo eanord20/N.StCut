@@ -34,8 +34,45 @@ public sealed class FileResolveService : IFileResolveService
         if (!Directory.Exists(searchPath))
             return Array.Empty<string>();
 
-        return Directory
-            .EnumerateFiles(searchPath, "*.dxf", SearchOption.AllDirectories)
+        var files = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(searchPath);
+
+        // Ручной обход: SearchOption.AllDirectories бросает UnauthorizedAccessException
+        // на первой же недоступной папке (например, "System Volume Information" в корне диска).
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            IEnumerable<string> entries;
+            try
+            {
+                entries = Directory.EnumerateFiles(dir, "*.dxf").ToList();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                continue;
+            }
+
+            files.AddRange(entries);
+
+            IEnumerable<string> subdirs;
+            try
+            {
+                subdirs = Directory.EnumerateDirectories(dir).ToList();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                continue;
+            }
+
+            foreach (var sub in subdirs)
+            {
+                if (!IsUnderExcludedPath(sub, excludePath))
+                    pending.Push(sub);
+            }
+        }
+
+        return files
             .Where(path => !IsUnderExcludedPath(path, excludePath))
             .ToList();
     }
